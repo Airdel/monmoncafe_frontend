@@ -1,0 +1,99 @@
+import { useState } from 'react';
+import { Coffee, Lock, Mail, Loader2 } from 'lucide-react';
+import { api } from '../lib/api';
+import { useAuthStore } from '../store/auth';
+import * as motion from 'motion/react-client';
+
+export function LoginPage() {
+  const [email, setEmail] = useState('admin@cafeteria.com');
+  const [password, setPassword] = useState('admin123');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const setAuth = useAuthStore((state) => state.setAuth);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    
+    try {
+      const res = await api.post('/auth/login', { email, password });
+      // NestJS TransformInterceptor wraps the response in a 'data' object
+      const { user, accessToken, refreshToken } = res.data.data ? res.data.data : res.data;
+      setAuth(user, accessToken, refreshToken);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Invalid credentials');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+      {/* Background decoration */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-[100px]" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-secondary/10 rounded-full blur-[100px]" />
+      </div>
+
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass-panel p-8 w-full max-w-md relative z-10 border-primary/20"
+      >
+        <div className="flex flex-col items-center mb-8 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4 glow-cyan">
+            <Coffee className="w-8 h-8 text-primary" />
+          </div>
+          <h1 className="font-headline text-3xl font-bold tracking-tight">MonMon Caf<span className="text-white/50">é</span></h1>
+          <p className="font-label text-white/40 text-xs uppercase tracking-widest mt-2">Management OS</p>
+        </div>
+
+        <form onSubmit={handleLogin} className="space-y-6">
+          {error && (
+            <div className="p-3 rounded-lg bg-error/10 border border-error/20 text-error text-sm text-center">
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-white/60 text-xs font-label uppercase tracking-wider mb-2">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                <input 
+                  type="email" 
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="w-full bg-[#0a0b0e]/50 border border-white/10 rounded-xl py-3 pl-11 pr-4 text-white placeholder-white/20 focus:outline-none focus:border-primary/50 focus:bg-white/5 transition-all"
+                  placeholder="admin@cafeteria.com"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-white/60 text-xs font-label uppercase tracking-wider mb-2">Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                <input 
+                  type="password" 
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  className="w-full bg-[#0a0b0e]/50 border border-white/10 rounded-xl py-3 pl-11 pr-4 text-white placeholder-white/20 focus:outline-none focus:border-primary/50 focus:bg-white/5 transition-all"
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+          </div>
+
+          <button 
+            disabled={loading}
+            className="w-full py-4 rounded-xl bg-gradient-to-r from-primary to-[#00a8b3] text-[#0a0b0e] font-bold text-sm shadow-[0_0_20px_rgba(0,219,233,0.3)] hover:scale-[1.02] transition-transform flex items-center justify-center disabled:opacity-70 disabled:hover:scale-100"
+          >
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'SYSTEM LOGIN'}
+          </button>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
