@@ -6,7 +6,6 @@ import { DashboardPage } from './pages/DashboardPage';
 import { PosPage } from './pages/PosPage';
 import { LoginPage } from './pages/LoginPage';
 import { useAuthStore } from './store/auth';
-import * as motion from "motion/react-client";
 
 function App() {
   const { accessToken } = useAuthStore();

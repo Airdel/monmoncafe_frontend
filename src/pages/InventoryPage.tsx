@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle2, SlidersHorizontal, RefreshCw, Coffee, Loader2, ShoppingCart, Package, ChevronDown, Plus, Send, X, Save, Trash2, ArrowUpDown } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, Plus, Send, X, Save, Trash2, ArrowUpDown } from 'lucide-react';
 import { api } from '../lib/api';
 import * as motion from 'motion/react-client';
 
