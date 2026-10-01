@@ -63,84 +63,84 @@ export function DashboardPage() {
 
 
   return (
-    <div className="h-full flex flex-col gap-6 animate-in fade-in duration-500 max-w-5xl mx-auto pb-8">
+    <div className="h-full flex flex-col gap-4 sm:gap-6 max-w-5xl mx-auto pb-8">
       
       {/* Header */}
       <div>
-        <h1 className="font-headline text-3xl font-bold text-primary tracking-tight">Dashboard</h1>
-        <p className="text-white/50 text-sm font-label uppercase tracking-wider mt-1">Estado operativo en tiempo real</p>
+        <h1 className="font-headline text-2xl sm:text-3xl font-bold text-primary tracking-tight">Dashboard</h1>
+        <p className="text-ink/50 text-sm font-label uppercase tracking-wider mt-1">Estado operativo en tiempo real</p>
       </div>
 
       {/* Bento Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 lg:gap-6">
         
         {/* Ventas del Día (Large widget) */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-          className="glass-panel p-6 col-span-12 md:col-span-8 flex flex-col justify-between"
+          className="glass-panel p-5 sm:p-6 md:col-span-8 flex flex-col justify-between"
         >
           <div className="flex justify-between items-start z-10 relative">
             <div>
-              <p className="text-white/50 text-sm font-label uppercase tracking-widest mb-2">Ventas del día</p>
-              <h2 className="font-headline text-6xl font-bold text-primary drop-shadow-md">{formatMoney(metrics.revenue)}</h2>
-              <p className="text-white/40 text-xs font-label mt-2">{metrics.totalTransactions} transacciones</p>
+              <p className="text-ink/50 text-sm font-label uppercase tracking-widest mb-2">Ventas del día</p>
+              <h2 className="font-headline text-4xl sm:text-5xl lg:text-6xl font-bold text-primary break-words">{formatMoney(metrics.revenue)}</h2>
+              <p className="text-ink/40 text-xs font-label mt-2">{metrics.totalTransactions} transacciones</p>
             </div>
             <TrendingUp className="w-6 h-6 text-secondary" />
           </div>
         </motion.div>
 
         {/* Column for Utilidad and Margen */}
-        <div className="col-span-12 md:col-span-4 flex flex-col gap-6">
+        <div className="md:col-span-4 grid grid-cols-2 md:flex md:flex-col gap-4 lg:gap-6">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-            className="glass-panel p-6 flex-1 flex flex-col justify-center"
+            className="glass-panel p-4 sm:p-6 flex-1 flex flex-col justify-center min-w-0"
           >
-             <div className="flex items-center gap-3 mb-2">
+             <div className="flex items-center gap-2 sm:gap-3 mb-2">
                <Wallet className="w-5 h-5 text-secondary" />
-               <p className="text-white/50 text-sm font-label uppercase tracking-widest">Utilidad bruta</p>
+               <p className="text-ink/50 text-xs sm:text-sm font-label uppercase tracking-widest">Utilidad bruta</p>
              </div>
-             <h3 className="font-headline text-4xl font-bold text-secondary">{formatMoney(metrics.grossProfit)}</h3>
+             <h3 className="font-headline text-2xl sm:text-3xl lg:text-4xl font-bold text-secondary break-words">{formatMoney(metrics.grossProfit)}</h3>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-            className="glass-panel p-6 flex-1 flex flex-col justify-center"
+            className="glass-panel p-4 sm:p-6 flex-1 flex flex-col justify-center min-w-0"
           >
-             <div className="flex items-center gap-3 mb-2">
-               <PieChart className="w-5 h-5 text-[#C9A0DC]" />
-               <p className="text-white/50 text-sm font-label uppercase tracking-widest">Margen bruto</p>
+             <div className="flex items-center gap-2 sm:gap-3 mb-2">
+               <PieChart className="w-5 h-5 text-accent" />
+               <p className="text-ink/50 text-xs sm:text-sm font-label uppercase tracking-widest">Margen bruto</p>
              </div>
-             <h3 className="font-headline text-4xl font-bold text-[#C9A0DC] drop-shadow-[0_0_15px_rgba(201,160,220,0.3)]">{metrics.marginPct}%</h3>
+             <h3 className="font-headline text-2xl sm:text-3xl lg:text-4xl font-bold text-accent">{metrics.marginPct}%</h3>
           </motion.div>
         </div>
 
         {/* Dinero Reposición */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-          className="glass-panel p-6 col-span-12"
+          className="glass-panel p-5 sm:p-6 md:col-span-12"
         >
           <div className="flex justify-between items-center mb-4">
-            <p className="text-white/50 text-sm font-label uppercase tracking-widest">Dinero para reposición de materia prima</p>
-            <Briefcase className="w-5 h-5 text-white/40" />
+            <p className="text-ink/50 text-sm font-label uppercase tracking-widest">Dinero para reposición de materia prima</p>
+            <Briefcase className="w-5 h-5 text-ink/40" />
           </div>
-          <h3 className="font-headline text-3xl font-bold text-white mb-4">{formatMoney(metrics.reinvestment)}</h3>
-          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-            <div className="h-full bg-primary glow-cyan rounded-full transition-all duration-1000" style={{ width: `${reinvestPct}%` }}></div>
+          <h3 className="font-headline text-3xl font-bold text-ink mb-4">{formatMoney(metrics.reinvestment)}</h3>
+          <div className="w-full h-1.5 bg-ink/10 rounded-full overflow-hidden">
+            <div className="h-full bg-primary glow-primary rounded-full transition-all duration-1000" style={{ width: `${reinvestPct}%` }}></div>
           </div>
-          <p className="text-white/30 text-xs mt-2">{reinvestPct.toFixed(0)}% de tus ventas se destina a materia prima</p>
+          <p className="text-ink/30 text-xs mt-2">{reinvestPct.toFixed(0)}% de tus ventas se destina a materia prima</p>
         </motion.div>
 
         {/* Top Products */}
         {topProducts.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
-            className="glass-panel p-6 col-span-12 md:col-span-6"
+            className="glass-panel p-5 sm:p-6 md:col-span-6"
           >
-            <p className="text-white/50 text-sm font-label uppercase tracking-widest mb-4">Top productos del día</p>
+            <p className="text-ink/50 text-sm font-label uppercase tracking-widest mb-4">Top productos del día</p>
             <div className="space-y-3">
               {topProducts.map((product, idx) => (
                 <div key={idx} className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <span className="w-6 h-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-mono text-xs font-bold">{idx + 1}</span>
-                    <span className="text-white text-sm font-medium">{product.name}</span>
+                    <span className="text-ink text-sm font-medium">{product.name}</span>
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className="text-white/40 text-xs font-mono">{product.qty}x</span>
+                    <span className="text-ink/40 text-xs font-mono">{product.qty}x</span>
                     <span className="font-mono text-secondary font-medium">{formatMoney(product.revenue)}</span>
                   </div>
                 </div>
@@ -151,11 +151,11 @@ export function DashboardPage() {
 
         {/* Alerts */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-          className={`col-span-12 ${topProducts.length > 0 ? 'md:col-span-6' : ''}`}
+          className={topProducts.length > 0 ? 'md:col-span-6' : 'md:col-span-12'}
         >
           {lowStock.length > 0 ? (
             <div className="space-y-3">
-              <p className="text-white/50 text-sm font-label uppercase tracking-widest mb-2">
+              <p className="text-ink/50 text-sm font-label uppercase tracking-widest mb-2">
                 <AlertTriangle className="w-4 h-4 text-error inline mr-2" />
                 Alertas de inventario ({lowStock.length})
               </p>
@@ -164,8 +164,8 @@ export function DashboardPage() {
                   <div className="flex items-center gap-3">
                     <Package className="w-5 h-5 text-error/80" />
                     <div>
-                      <h4 className="font-medium text-white text-sm">{item.name}</h4>
-                      <p className="text-white/40 text-xs">{Number(item.currentStock).toFixed(0)} / {Number(item.minStock).toFixed(0)} {item.unit.toLowerCase()}</p>
+                      <h4 className="font-medium text-ink text-sm">{item.name}</h4>
+                      <p className="text-ink/40 text-xs">{Number(item.currentStock).toFixed(0)} / {Number(item.minStock).toFixed(0)} {item.unit.toLowerCase()}</p>
                     </div>
                   </div>
                   <span className="text-error text-xs font-label font-bold uppercase tracking-wider">Bajo</span>
@@ -177,15 +177,15 @@ export function DashboardPage() {
               <Sparkles className="w-6 h-6 text-primary" />
               <div>
                 <h4 className="font-headline font-bold text-primary">Todo en orden</h4>
-                <p className="text-white/60 text-sm italic">No hay alertas de inventario</p>
+                <p className="text-ink/60 text-sm italic">No hay alertas de inventario</p>
               </div>
             </div>
           )}
         </motion.div>
 
         {/* Actividad Reciente */}
-        <div className="col-span-12">
-          <h3 className="text-white/50 text-xs font-label uppercase tracking-widest mb-4 mt-2">Actividad Reciente</h3>
+        <div className="md:col-span-12">
+          <h3 className="text-ink/50 text-xs font-label uppercase tracking-widest mb-4 mt-2">Actividad Reciente</h3>
           
           <div className="space-y-3">
             {recentActivity.length > 0 ? (
@@ -195,15 +195,15 @@ export function DashboardPage() {
                   initial={{ opacity: 0, x: -10 }} 
                   animate={{ opacity: 1, x: 0 }} 
                   transition={{ delay: 0.05 * idx }}
-                  className="glass-panel p-4 flex items-center justify-between hover:bg-white/[0.03] transition-colors"
+                  className="glass-panel p-4 flex items-center justify-between gap-3 hover:bg-ink/[0.03] transition-colors"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
-                      <Coffee className="w-4 h-4 text-white/80" />
+                  <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                    <div className="w-10 h-10 shrink-0 rounded-full bg-ink/5 flex items-center justify-center border border-ink/10">
+                      <Coffee className="w-4 h-4 text-ink/80" />
                     </div>
-                    <div>
-                      <h4 className="font-medium text-white text-sm line-clamp-1">{sale.productNames}</h4>
-                      <p className="text-white/40 text-xs">{timeAgo(sale.createdAt)} · {sale.cashier} · {sale.paymentMethod === 'CASH' ? 'Efectivo' : 'Transferencia'}</p>
+                    <div className="min-w-0">
+                      <h4 className="font-medium text-ink text-sm line-clamp-1">{sale.productNames}</h4>
+                      <p className="text-ink/40 text-xs">{timeAgo(sale.createdAt)} · {sale.cashier} · {sale.paymentMethod === 'CASH' ? 'Efectivo' : 'Transferencia'}</p>
                     </div>
                   </div>
                   <span className="font-mono text-secondary font-medium shrink-0">+{formatMoney(sale.total)}</span>
@@ -211,7 +211,7 @@ export function DashboardPage() {
               ))
             ) : (
               <div className="glass-panel p-6 flex items-center justify-center">
-                <p className="text-white/30 font-label text-sm uppercase tracking-widest">Sin ventas registradas hoy</p>
+                <p className="text-ink/30 font-label text-sm uppercase tracking-widest">Sin ventas registradas hoy</p>
               </div>
             )}
           </div>

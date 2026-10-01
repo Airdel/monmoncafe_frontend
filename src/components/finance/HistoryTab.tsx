@@ -7,7 +7,7 @@ import { unwrap } from '../../lib/unwrap';
 import { ClosingBreakdown } from './ClosingBreakdown';
 import { inputClass, labelClass } from './styles';
 import type { DailyClosing } from './types';
-import { Modal } from './ui';
+import { Modal } from '../ui/Modal';
 
 export function HistoryTab({ isAdmin, reloadKey }: { isAdmin: boolean; reloadKey: number }) {
   const [from, setFrom] = useState('');
@@ -73,11 +73,11 @@ export function HistoryTab({ isAdmin, reloadKey }: { isAdmin: boolean; reloadKey
       <div className="glass-panel p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
         <div>
           <label className={labelClass} htmlFor="history-from">Desde</label>
-          <input id="history-from" type="date" value={from} max={to || todayISO()} onChange={e => changeRange(setFrom, e.target.value)} className={`${inputClass} [color-scheme:dark]`} />
+          <input id="history-from" type="date" value={from} max={to || todayISO()} onChange={e => changeRange(setFrom, e.target.value)} className={inputClass} />
         </div>
         <div>
           <label className={labelClass} htmlFor="history-to">Hasta</label>
-          <input id="history-to" type="date" value={to} min={from || undefined} max={todayISO()} onChange={e => changeRange(setTo, e.target.value)} className={`${inputClass} [color-scheme:dark]`} />
+          <input id="history-to" type="date" value={to} min={from || undefined} max={todayISO()} onChange={e => changeRange(setTo, e.target.value)} className={inputClass} />
         </div>
         <div>
           <p className={labelClass}>Ventas del periodo</p>
@@ -88,27 +88,27 @@ export function HistoryTab({ isAdmin, reloadKey }: { isAdmin: boolean; reloadKey
           <p className={`font-headline text-2xl font-bold ${totalNet >= 0 ? 'text-secondary' : 'text-error'}`}>{formatMoney(totalNet)}</p>
         </div>
       </div>
-      {!from && !to && <p className="text-white/40 text-xs font-label -mt-3">Mostrando los últimos 31 cortes.</p>}
+      {!from && !to && <p className="text-ink/40 text-xs font-label -mt-3">Mostrando los últimos 31 cortes.</p>}
 
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>
       ) : error ? (
         <div className="glass-panel p-6 text-error">{error}</div>
       ) : closings.length === 0 ? (
-        <div className="glass-panel p-10 text-center text-white/50">Aún no hay cortes en este periodo.</div>
+        <div className="glass-panel p-10 text-center text-ink/50">Aún no hay cortes en este periodo.</div>
       ) : (
-        <div className="glass-panel divide-y divide-white/5">
+        <div className="glass-panel divide-y divide-ink/5">
           {closings.map(c => (
-            <button key={c.id} onClick={() => openDetail(c)} className="w-full flex items-center gap-4 p-4 text-left hover:bg-white/5 transition-all">
+            <button key={c.id} onClick={() => openDetail(c)} className="w-full flex items-center gap-3 sm:gap-4 p-4 text-left hover:bg-ink/5 transition-all">
               <div className="flex-1 min-w-0">
-                <p className="text-white font-medium">{formatDay(c.date)}</p>
-                <p className="text-white/40 text-xs font-label mt-0.5">{c.totalTransactions} tickets · cerró {c.user?.name ?? '—'}</p>
+                <p className="text-ink font-medium">{formatDay(c.date)}</p>
+                <p className="text-ink/40 text-xs font-label mt-0.5">{c.totalTransactions} tickets · cerró {c.user?.name ?? '—'}</p>
               </div>
               <div className="text-right">
                 <p className="text-primary font-semibold">{formatMoney(c.totalSales)}</p>
                 <p className={`text-xs font-label ${Number(c.netProfit) >= 0 ? 'text-secondary' : 'text-error'}`}>Neta {formatMoney(c.netProfit)}</p>
               </div>
-              <ChevronRight className="w-4 h-4 text-white/30" />
+              <ChevronRight className="w-4 h-4 text-ink/30" />
             </button>
           ))}
         </div>
@@ -120,10 +120,10 @@ export function HistoryTab({ isAdmin, reloadKey }: { isAdmin: boolean; reloadKey
             <div className="flex justify-center py-10"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
           ) : (
             <div className="flex flex-col gap-4">
-              <p className="text-white/50 text-sm">
+              <p className="text-ink/50 text-sm">
                 Cerrado por {selected.user?.name ?? '—'} el {new Date(selected.createdAt).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}
               </p>
-              {selected.notes && <p className="text-white/70 text-sm italic">“{selected.notes}”</p>}
+              {selected.notes && <p className="text-ink/70 text-sm italic">“{selected.notes}”</p>}
               <ClosingBreakdown totals={selected} details={selected.details ?? []} />
               {isAdmin && (
                 <button onClick={reopen} disabled={reopening} className="self-start flex items-center gap-2 px-4 py-2 rounded-xl border border-error/30 text-error/80 hover:text-error hover:bg-error/10 transition-all disabled:opacity-40">

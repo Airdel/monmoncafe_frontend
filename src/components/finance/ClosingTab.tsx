@@ -67,18 +67,18 @@ export function ClosingTab({ onClosed }: { onClosed: () => void }) {
             value={date}
             max={todayISO()}
             onChange={e => changeDate(e.target.value)}
-            className={`${inputClass} [color-scheme:dark]`}
+            className={inputClass}
           />
         </div>
         <div className="flex-1">
-          <p className="font-headline text-xl font-bold text-white">{formatDay(date, { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+          <p className="font-headline text-xl font-bold text-ink">{formatDay(date, { weekday: 'long', day: 'numeric', month: 'long' })}</p>
           {preview?.alreadyClosed ? (
             <p className="flex items-center gap-2 text-secondary text-sm mt-1"><Lock className="w-4 h-4" /> Este día ya está cerrado. Puedes consultarlo en el historial.</p>
           ) : (
-            <p className="text-white/50 text-sm mt-1">Vista previa en vivo; nada se guarda hasta que cierres el día.</p>
+            <p className="text-ink/50 text-sm mt-1">Vista previa en vivo; nada se guarda hasta que cierres el día.</p>
           )}
         </div>
-        <button onClick={refresh} className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:text-white transition-all" disabled={loading}>
+        <button onClick={refresh} className="flex items-center gap-2 px-4 py-3 rounded-xl bg-ink/5 border border-ink/10 text-ink/70 hover:text-ink transition-all" disabled={loading}>
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Actualizar
         </button>
       </div>

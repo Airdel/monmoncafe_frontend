@@ -26,14 +26,14 @@ export function ClosingBreakdown({ totals, details }: { totals: ClosingTotals; d
       </div>
 
       <div className="glass-panel p-5">
-        <h3 className="font-headline text-lg font-bold text-white mb-4">Insumos consumidos</h3>
+        <h3 className="font-headline text-lg font-bold text-ink mb-4">Insumos consumidos</h3>
         {details.length === 0 ? (
-          <p className="text-white/40 text-sm">No hubo consumo de insumos registrado este día.</p>
+          <p className="text-ink/40 text-sm">No hubo consumo de insumos registrado este día.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-white/40 text-xs font-label uppercase tracking-widest text-left">
+                <tr className="text-ink/40 text-xs font-label uppercase tracking-widest text-left">
                   <th className="pb-3 font-medium">Insumo</th>
                   <th className="pb-3 font-medium text-right">Cantidad</th>
                   <th className="pb-3 font-medium text-right">Costo de reposición</th>
@@ -41,9 +41,9 @@ export function ClosingBreakdown({ totals, details }: { totals: ClosingTotals; d
               </thead>
               <tbody>
                 {details.map(d => (
-                  <tr key={d.ingredientId} className="border-t border-white/5">
-                    <td className="py-3 text-white">{d.ingredientName}</td>
-                    <td className="py-3 text-right text-white/70">{Number(d.quantityConsumed).toLocaleString('es-MX', { maximumFractionDigits: 4 })}</td>
+                  <tr key={d.ingredientId} className="border-t border-ink/5">
+                    <td className="py-3 text-ink">{d.ingredientName}</td>
+                    <td className="py-3 text-right text-ink/70">{Number(d.quantityConsumed).toLocaleString('es-MX', { maximumFractionDigits: 4 })}</td>
                     <td className="py-3 text-right text-primary">{formatMoney(d.costConsumed)}</td>
                   </tr>
                 ))}
@@ -59,10 +59,10 @@ export function ClosingBreakdown({ totals, details }: { totals: ClosingTotals; d
 function MiniStat({ icon: Icon, label, value }: { icon: typeof Banknote; label: string; value: string }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="p-2 rounded-lg bg-white/5"><Icon className="w-4 h-4 text-white/60" /></div>
+      <div className="p-2 rounded-lg bg-ink/5"><Icon className="w-4 h-4 text-ink/60" /></div>
       <div>
-        <p className="text-white/40 text-xs font-label uppercase tracking-wider">{label}</p>
-        <p className="text-white font-semibold">{value}</p>
+        <p className="text-ink/40 text-xs font-label uppercase tracking-wider">{label}</p>
+        <p className="text-ink font-semibold">{value}</p>
       </div>
     </div>
   );

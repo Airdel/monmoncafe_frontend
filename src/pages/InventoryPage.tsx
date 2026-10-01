@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, Shoppi
 import { api } from '../lib/api';
 import { getErrorMessage } from '../lib/errors';
 import { useAuthStore } from '../store/auth';
+import { Modal } from '../components/ui/Modal';
 import * as motion from 'motion/react-client';
 
 interface Ingredient {
@@ -193,26 +194,26 @@ export function InventoryPage() {
   ];
 
   return (
-    <div className="h-full flex flex-col gap-6 animate-in fade-in duration-500">
+    <div className="lg:h-full flex flex-col gap-4 sm:gap-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="font-headline text-3xl font-bold text-white tracking-tight">Inventario</h1>
-          <p className="text-white/50 text-sm font-label uppercase tracking-wider mt-1">Gestión de stock, recetas y compras</p>
+          <h1 className="font-headline text-2xl sm:text-3xl font-bold text-ink tracking-tight">Inventario</h1>
+          <p className="text-ink/50 text-sm font-label uppercase tracking-wider mt-1">Gestión de stock, recetas y compras</p>
         </div>
         
         {/* Tabs */}
-        <div className="flex bg-white/5 rounded-xl p-1 border border-white/10">
+        <div className="flex w-full sm:w-auto bg-ink/5 rounded-xl p-1 border border-ink/10">
           {tabs.map(tab => {
             const Icon = tab.icon;
             return (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`px-5 py-2 rounded-lg font-label text-sm uppercase tracking-widest flex items-center gap-2 transition-all duration-300 ${
+                className={`flex-1 sm:flex-none justify-center px-3 sm:px-5 py-2.5 sm:py-2 rounded-lg font-label text-sm uppercase tracking-wider sm:tracking-widest flex items-center gap-2 transition-all duration-300 ${
                   activeTab === tab.key
-                    ? 'bg-primary/20 text-primary font-bold shadow-[0_0_15px_rgba(0,219,233,0.2)]'
-                    : 'text-white/50 hover:text-white'
+                    ? 'bg-primary/20 text-primary font-bold glow-primary-soft'
+                    : 'text-ink/50 hover:text-ink'
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -227,32 +228,86 @@ export function InventoryPage() {
       {activeTab === 'stock' && (
         <div className="flex-1 flex flex-col gap-4 min-h-0">
           {/* Stock filter */}
-          <div className="flex bg-white/5 rounded-full p-1 border border-white/10 w-fit">
+          <div className="flex bg-ink/5 rounded-full p-1 border border-ink/10 w-fit">
             <button
               onClick={() => setStockFilter('all')}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium flex items-center gap-2 transition-all ${
-                stockFilter === 'all' ? 'bg-secondary/20 text-secondary' : 'text-white/50 hover:text-white'
+              className={`px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-all ${
+                stockFilter === 'all' ? 'bg-secondary/20 text-secondary' : 'text-ink/50 hover:text-ink'
               }`}
             >
-              <div className={`w-2 h-2 rounded-full ${stockFilter === 'all' ? 'bg-secondary glow-mint animate-pulse' : 'bg-white/30'}`}></div>
-              In Stock ({ingredients.length})
+              <div className={`w-2 h-2 rounded-full ${stockFilter === 'all' ? 'bg-secondary glow-secondary animate-pulse' : 'bg-ink/30'}`}></div>
+              Todos ({ingredients.length})
             </button>
             <button
               onClick={() => setStockFilter('low')}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium flex items-center gap-2 transition-all ${
-                stockFilter === 'low' ? 'bg-error/20 text-error' : 'text-white/50 hover:text-white'
+              className={`px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-all ${
+                stockFilter === 'low' ? 'bg-error/20 text-error' : 'text-ink/50 hover:text-ink'
               }`}
             >
               <div className={`w-2 h-2 rounded-full ${stockFilter === 'low' ? 'bg-error animate-pulse' : 'bg-error/50'}`}></div>
-              Low Stock ({lowStockCount})
+              Stock bajo ({lowStockCount})
             </button>
           </div>
 
+          {/* Stock cards (phones and portrait tablets) */}
+          <div className="lg:hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {loading ? (
+              <div className="glass-panel py-8 text-center text-ink/40 sm:col-span-2">
+                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                Cargando inventario...
+              </div>
+            ) : filteredIngredients.length === 0 ? (
+              <div className="glass-panel py-8 px-4 text-center text-ink/40 sm:col-span-2">
+                {stockFilter === 'low' ? 'No hay ingredientes con stock bajo ✅' : 'No hay ingredientes registrados'}
+              </div>
+            ) : filteredIngredients.map(item => {
+              const isLow = Number(item.currentStock) <= Number(item.minStock);
+              const stockPct = Number(item.minStock) > 0 ? (Number(item.currentStock) / (Number(item.minStock) * 3)) * 100 : 100;
+              return (
+                <div key={item.id} className={`glass-panel p-4 ${isLow ? 'border-l-4 border-l-error' : ''}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-ink truncate">{item.name}</p>
+                      <p className="text-ink/50 text-xs truncate">{item.supplier?.name || 'Sin proveedor'}</p>
+                    </div>
+                    {isLow ? (
+                      <span className="flex items-center gap-1 text-error text-xs font-label font-bold uppercase shrink-0">
+                        <AlertTriangle className="w-4 h-4" /> Bajo
+                      </span>
+                    ) : (
+                      <CheckCircle2 className="w-5 h-5 text-secondary shrink-0" />
+                    )}
+                  </div>
+                  <div className="flex items-end justify-between gap-3 mt-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm">
+                        <span className="font-mono text-ink/80">{Number(item.currentStock).toLocaleString()}</span>
+                        <span className="text-ink/40 text-xs"> {item.unit.toLowerCase()} · mín. {Number(item.minStock).toLocaleString()}</span>
+                      </p>
+                      <div className="w-full max-w-[10rem] h-1.5 bg-ink/10 rounded-full mt-1.5 overflow-hidden">
+                        <div className={`h-full rounded-full ${isLow ? 'bg-error' : 'bg-secondary'}`} style={{ width: `${Math.min(stockPct, 100)}%` }}></div>
+                      </div>
+                      <p className="font-mono text-secondary text-xs mt-1.5">${Number(item.currentCostPerUnit).toFixed(4)} / {item.unit.toLowerCase()}</p>
+                    </div>
+                    {canManage && (
+                      <button
+                        onClick={() => { setAdjustModal(item); setAdjustType('ADJUSTMENT'); setAdjustQty(''); setAdjustReason(''); }}
+                        className="px-4 py-2.5 rounded-xl bg-ink/5 border border-ink/10 text-ink/70 hover:text-primary hover:border-primary/30 transition-all text-xs font-label uppercase tracking-wider flex items-center gap-1 shrink-0"
+                      >
+                        <ArrowUpDown className="w-3.5 h-3.5" /> Ajustar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
           {/* Stock Table */}
-          <div className="glass-panel overflow-auto flex-1 border-white/5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full">
+          <div className="hidden lg:block glass-panel overflow-auto flex-1 border-ink/5 scrollbar-thin">
             <table className="w-full text-left border-collapse min-w-[600px]">
-              <thead className="sticky top-0 bg-[#0d0e12]/95 backdrop-blur-sm z-10">
-                <tr className="border-b border-white/10 text-white/40 font-label text-xs uppercase tracking-widest">
+              <thead className="sticky top-0 bg-raised/95 backdrop-blur-sm z-10">
+                <tr className="border-b border-ink/10 text-ink/40 font-label text-xs uppercase tracking-widest">
                   <th className="py-4 px-6 font-medium">Ingrediente</th>
                   <th className="py-4 px-6 font-medium">Proveedor</th>
                   <th className="py-4 px-6 font-medium">Stock Actual</th>
@@ -265,14 +320,14 @@ export function InventoryPage() {
               <tbody className="font-body text-sm">
                 {loading ? (
                   <tr>
-                    <td colSpan={canManage ? 7 : 6} className="py-8 text-center text-white/40">
+                    <td colSpan={canManage ? 7 : 6} className="py-8 text-center text-ink/40">
                       <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
                       Cargando inventario...
                     </td>
                   </tr>
                 ) : filteredIngredients.length === 0 ? (
                   <tr>
-                    <td colSpan={canManage ? 7 : 6} className="py-8 text-center text-white/40">
+                    <td colSpan={canManage ? 7 : 6} className="py-8 text-center text-ink/40">
                       {stockFilter === 'low' ? 'No hay ingredientes con stock bajo ✅' : 'No hay ingredientes registrados'}
                     </td>
                   </tr>
@@ -285,20 +340,20 @@ export function InventoryPage() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: idx * 0.03 }}
-                      className="border-b border-white/5 hover:bg-white/[0.02] transition-colors group"
+                      className="border-b border-ink/5 hover:bg-ink/[0.02] transition-colors group"
                     >
-                      <td className="py-4 px-6 text-white group-hover:text-primary transition-colors font-medium">{item.name}</td>
-                      <td className="py-4 px-6 text-white/50">{item.supplier?.name || '—'}</td>
+                      <td className="py-4 px-6 text-ink group-hover:text-primary transition-colors font-medium">{item.name}</td>
+                      <td className="py-4 px-6 text-ink/50">{item.supplier?.name || '—'}</td>
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-3">
-                          <span className="font-mono text-white/80">{Number(item.currentStock).toLocaleString()}</span>
-                          <span className="text-white/30 text-xs">{item.unit.toLowerCase()}</span>
+                          <span className="font-mono text-ink/80">{Number(item.currentStock).toLocaleString()}</span>
+                          <span className="text-ink/30 text-xs">{item.unit.toLowerCase()}</span>
                         </div>
-                        <div className="w-20 h-1 bg-white/10 rounded-full mt-1 overflow-hidden">
+                        <div className="w-20 h-1 bg-ink/10 rounded-full mt-1 overflow-hidden">
                           <div className={`h-full rounded-full ${isLow ? 'bg-error' : 'bg-secondary'}`} style={{ width: `${Math.min(stockPct, 100)}%` }}></div>
                         </div>
                       </td>
-                      <td className="py-4 px-6 font-mono text-white/40">{Number(item.minStock).toLocaleString()}</td>
+                      <td className="py-4 px-6 font-mono text-ink/40">{Number(item.minStock).toLocaleString()}</td>
                       <td className="py-4 px-6 font-mono text-secondary">${Number(item.currentCostPerUnit).toFixed(4)}</td>
                       <td className="py-4 px-6 flex justify-center">
                         {isLow ? (
@@ -312,7 +367,7 @@ export function InventoryPage() {
                       {canManage && <td className="py-4 px-6 text-center">
                         <button
                           onClick={() => { setAdjustModal(item); setAdjustType('ADJUSTMENT'); setAdjustQty(''); setAdjustReason(''); }}
-                          className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/60 hover:text-primary hover:border-primary/30 transition-all text-xs font-label uppercase tracking-wider flex items-center gap-1 mx-auto"
+                          className="px-3 py-1.5 rounded-lg bg-ink/5 border border-ink/10 text-ink/60 hover:text-primary hover:border-primary/30 transition-all text-xs font-label uppercase tracking-wider flex items-center gap-1 mx-auto"
                         >
                           <ArrowUpDown className="w-3 h-3" /> Ajustar
                         </button>
@@ -328,11 +383,11 @@ export function InventoryPage() {
 
       {/* ═══ TAB: RECIPES ═══ */}
       {activeTab === 'recipes' && (
-        <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0">
+        <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
           {/* Product Selector */}
           <div className="flex-1 flex flex-col gap-4 min-w-0">
-            <div className="glass-panel p-6">
-              <label className="text-white/50 text-xs font-label uppercase tracking-widest block mb-3">Seleccionar Producto</label>
+            <div className="glass-panel p-4 sm:p-6">
+              <label className="text-ink/50 text-xs font-label uppercase tracking-widest block mb-3">Seleccionar Producto</label>
               <div className="relative">
                 <select
                   value={selectedProductId || ''}
@@ -342,32 +397,32 @@ export function InventoryPage() {
                     setRecipeLoading(!!id);
                     if (!id) { setRecipe([]); setSelectedProduct(null); }
                   }}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white appearance-none cursor-pointer focus:border-primary/50 focus:outline-none transition-colors [&>option]:bg-[#0d0e12] [&>option]:text-white"
+                  className="w-full px-4 py-3 bg-ink/5 border border-ink/10 rounded-xl text-ink appearance-none cursor-pointer focus:border-primary/50 focus:outline-none transition-colors [&>option]:bg-raised [&>option]:text-ink"
                 >
                   <option value="">— Elige un producto —</option>
                   {products.map(p => (
                     <option key={p.id} value={p.id}>{p.name} {p.category ? `(${p.category.name})` : ''}</option>
                   ))}
                 </select>
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/40 pointer-events-none" />
               </div>
             </div>
 
             {/* Recipe Table */}
             {selectedProductId && (
-              <div className="glass-panel overflow-auto flex-1 border-white/5">
+              <div className="glass-panel overflow-auto flex-1 border-ink/5">
                 {recipeLoading ? (
                   <div className="p-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></div>
                 ) : recipe.length === 0 ? (
-                  <div className="p-8 text-center text-white/40">Este producto no tiene receta asignada</div>
+                  <div className="p-8 text-center text-ink/40">Este producto no tiene receta asignada</div>
                 ) : (
-                  <table className="w-full text-left border-collapse">
+                  <table className="w-full text-left border-collapse min-w-[420px]">
                     <thead>
-                      <tr className="border-b border-white/10 text-white/40 font-label text-xs uppercase tracking-widest">
-                        <th className="py-3 px-6 font-medium">Ingrediente</th>
-                        <th className="py-3 px-6 font-medium">Cantidad</th>
-                        <th className="py-3 px-6 font-medium">Unidad</th>
-                        <th className="py-3 px-6 font-medium">Costo</th>
+                      <tr className="border-b border-ink/10 text-ink/40 font-label text-xs uppercase tracking-widest">
+                        <th className="py-3 px-3 sm:px-6 font-medium">Ingrediente</th>
+                        <th className="py-3 px-3 sm:px-6 font-medium">Cantidad</th>
+                        <th className="py-3 px-3 sm:px-6 font-medium">Unidad</th>
+                        <th className="py-3 px-3 sm:px-6 font-medium">Costo</th>
                         {editingRecipe && <th className="py-3 px-4 font-medium w-10"></th>}
                       </tr>
                     </thead>
@@ -375,20 +430,20 @@ export function InventoryPage() {
                       {editingRecipe ? (
                         <>
                           {editRecipeRows.map((row, idx) => (
-                            <tr key={idx} className="border-b border-white/5">
-                              <td className="py-2 px-6">
+                            <tr key={idx} className="border-b border-ink/5">
+                              <td className="py-2 px-3 sm:px-6">
                                 <select value={row.ingredientId} onChange={e => { const rows = [...editRecipeRows]; rows[idx].ingredientId = Number(e.target.value); setEditRecipeRows(rows); }}
-                                  className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-xs appearance-none [&>option]:bg-[#0d0e12]">
+                                  className="w-full px-2 py-1.5 bg-ink/5 border border-ink/10 rounded-lg text-ink text-xs appearance-none [&>option]:bg-raised">
                                   <option value={0}>—</option>
                                   {ingredients.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                                 </select>
                               </td>
-                              <td className="py-2 px-6">
+                              <td className="py-2 px-3 sm:px-6">
                                 <input type="number" value={row.quantityUsed} onChange={e => { const rows = [...editRecipeRows]; rows[idx].quantityUsed = e.target.value; setEditRecipeRows(rows); }}
-                                  className="w-20 px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-primary font-mono text-xs focus:outline-none focus:border-primary/50" />
+                                  className="w-20 px-2 py-1.5 bg-ink/5 border border-ink/10 rounded-lg text-primary font-mono text-xs focus:outline-none focus:border-primary/50" />
                               </td>
-                              <td className="py-2 px-6 text-white/50">{ingredients.find(i => i.id === row.ingredientId)?.unit.toLowerCase() || '—'}</td>
-                              <td className="py-2 px-6 font-mono text-secondary text-xs">
+                              <td className="py-2 px-3 sm:px-6 text-ink/50">{ingredients.find(i => i.id === row.ingredientId)?.unit.toLowerCase() || '—'}</td>
+                              <td className="py-2 px-3 sm:px-6 font-mono text-secondary text-xs">
                                 {(() => { const ing = ingredients.find(i => i.id === row.ingredientId); return ing ? '$' + (Number(row.quantityUsed) * Number(ing.currentCostPerUnit)).toFixed(4) : '—'; })()}
                               </td>
                               <td className="py-2 px-4">
@@ -397,7 +452,7 @@ export function InventoryPage() {
                             </tr>
                           ))}
                           <tr>
-                            <td colSpan={5} className="py-2 px-6">
+                            <td colSpan={5} className="py-2 px-3 sm:px-6">
                               <button onClick={() => setEditRecipeRows([...editRecipeRows, { ingredientId: 0, quantityUsed: '' }])}
                                 className="text-primary text-xs font-label uppercase tracking-wider flex items-center gap-1 hover:text-primary/80"><Plus className="w-3 h-3" /> Agregar ingrediente</button>
                             </td>
@@ -405,11 +460,11 @@ export function InventoryPage() {
                         </>
                       ) : (
                         recipe.map((r, idx) => (
-                          <motion.tr key={r.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: idx * 0.05 }} className="border-b border-white/5">
-                            <td className="py-3 px-6 text-white">{r.ingredient.name}</td>
-                            <td className="py-3 px-6 font-mono text-primary">{Number(r.quantityUsed).toFixed(2)}</td>
-                            <td className="py-3 px-6 text-white/50">{r.ingredient.unit.toLowerCase()}</td>
-                            <td className="py-3 px-6 font-mono text-secondary">${(Number(r.quantityUsed) * Number(r.ingredient.currentCostPerUnit)).toFixed(4)}</td>
+                          <motion.tr key={r.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: idx * 0.05 }} className="border-b border-ink/5">
+                            <td className="py-3 px-3 sm:px-6 text-ink">{r.ingredient.name}</td>
+                            <td className="py-3 px-3 sm:px-6 font-mono text-primary">{Number(r.quantityUsed).toFixed(2)}</td>
+                            <td className="py-3 px-3 sm:px-6 text-ink/50">{r.ingredient.unit.toLowerCase()}</td>
+                            <td className="py-3 px-3 sm:px-6 font-mono text-secondary">${(Number(r.quantityUsed) * Number(r.ingredient.currentCostPerUnit)).toFixed(4)}</td>
                           </motion.tr>
                         ))
                       )}
@@ -423,40 +478,40 @@ export function InventoryPage() {
           {/* Recipe Summary Card */}
           {selectedProduct && (
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="w-full lg:w-80 shrink-0">
-              <div className="glass-panel p-6 border-t-2 border-t-primary relative overflow-hidden">
+              <div className="glass-panel p-5 sm:p-6 border-t-2 border-t-primary relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-10"><Coffee className="w-32 h-32" /></div>
                 <div className="relative z-10">
                   <div className="flex justify-between items-start mb-6">
                     <div>
-                      <h3 className="font-headline text-xl font-bold text-white">{selectedProduct.name}</h3>
-                      <p className="text-white/40 text-xs mt-1">{selectedProduct.category?.name} · {selectedProduct.size || 'Estándar'}</p>
+                      <h3 className="font-headline text-xl font-bold text-ink">{selectedProduct.name}</h3>
+                      <p className="text-ink/40 text-xs mt-1">{selectedProduct.category?.name} · {selectedProduct.size || 'Estándar'}</p>
                     </div>
                     <span className="px-2 py-1 bg-primary/20 text-primary text-[10px] font-label tracking-widest uppercase rounded">{recipe.length} items</span>
                   </div>
                   <div className="grid grid-cols-3 gap-3 mb-4">
-                    <div className="bg-[#111318]/50 p-3 rounded-xl border border-white/5">
-                      <p className="text-white/40 text-xs mb-1">Costo</p>
+                    <div className="bg-canvas/60 p-3 rounded-xl border border-ink/5">
+                      <p className="text-ink/40 text-xs mb-1">Costo</p>
                       <p className="font-mono text-secondary font-medium">${recipeCost.toFixed(2)}</p>
                     </div>
-                    <div className="bg-[#111318]/50 p-3 rounded-xl border border-white/5">
-                      <p className="text-white/40 text-xs mb-1">Precio</p>
+                    <div className="bg-canvas/60 p-3 rounded-xl border border-ink/5">
+                      <p className="text-ink/40 text-xs mb-1">Precio</p>
                       <p className="font-mono text-primary font-medium">${sellingPrice.toFixed(2)}</p>
                     </div>
-                    <div className="bg-[#111318]/50 p-3 rounded-xl border border-white/5">
-                      <p className="text-white/40 text-xs mb-1">Margen</p>
-                      <p className={`font-mono font-medium ${margin > 50 ? 'text-secondary' : margin > 30 ? 'text-yellow-400' : 'text-error'}`}>{margin.toFixed(0)}%</p>
+                    <div className="bg-canvas/60 p-3 rounded-xl border border-ink/5">
+                      <p className="text-ink/40 text-xs mb-1">Margen</p>
+                      <p className={`font-mono font-medium ${margin > 50 ? 'text-secondary' : margin > 30 ? 'text-warning' : 'text-error'}`}>{margin.toFixed(0)}%</p>
                     </div>
                   </div>
                   {/* Edit / Save buttons */}
                   {editingRecipe ? (
                     <div className="flex gap-2">
-                      <button onClick={() => setEditingRecipe(false)} className="flex-1 py-2.5 rounded-xl border border-white/10 text-white/60 hover:text-white text-sm font-medium flex items-center justify-center gap-1"><X className="w-4 h-4" /> Cancelar</button>
-                      <button onClick={saveRecipe} disabled={recipeSaving} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-secondary/80 to-[#1b9a73] text-[#0a0b0e] font-bold text-sm flex items-center justify-center gap-1 disabled:opacity-50">
+                      <button onClick={() => setEditingRecipe(false)} className="flex-1 py-2.5 rounded-xl border border-ink/10 text-ink/60 hover:text-ink text-sm font-medium flex items-center justify-center gap-1"><X className="w-4 h-4" /> Cancelar</button>
+                      <button onClick={saveRecipe} disabled={recipeSaving} className="flex-1 py-2.5 rounded-xl bg-cta-alt text-on-secondary font-bold text-sm flex items-center justify-center gap-1 disabled:opacity-50">
                         {recipeSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4" /> Guardar</>}
                       </button>
                     </div>
                   ) : canManage && (
-                    <button onClick={startEditRecipe} className="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:text-primary hover:border-primary/30 text-sm font-medium flex items-center justify-center gap-2 transition-all">
+                    <button onClick={startEditRecipe} className="w-full py-2.5 rounded-xl bg-ink/5 border border-ink/10 text-ink/70 hover:text-primary hover:border-primary/30 text-sm font-medium flex items-center justify-center gap-2 transition-all">
                       <SlidersHorizontal className="w-4 h-4" /> Editar Receta
                     </button>
                   )}
@@ -469,84 +524,84 @@ export function InventoryPage() {
 
       {/* ═══ TAB: PURCHASES ═══ */}
       {activeTab === 'purchases' && canManage && (
-        <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0">
+        <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
           {/* Purchase Form */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="w-full lg:w-[420px] shrink-0"
           >
-            <div className="glass-panel p-6 border-t-2 border-t-secondary">
+            <div className="glass-panel p-5 sm:p-6 border-t-2 border-t-secondary">
               <div className="flex items-center gap-2 mb-6">
                 <Plus className="w-5 h-5 text-secondary" />
-                <h3 className="font-label uppercase tracking-widest text-sm font-semibold text-white">Registrar Compra</h3>
+                <h3 className="font-label uppercase tracking-widest text-sm font-semibold text-ink">Registrar Compra</h3>
               </div>
 
               <div className="space-y-4">
                 {/* Ingredient Select */}
                 <div>
-                  <label className="text-white/50 text-xs font-label uppercase tracking-widest block mb-2">Ingrediente</label>
+                  <label className="text-ink/50 text-xs font-label uppercase tracking-widest block mb-2">Ingrediente</label>
                   <div className="relative">
                     <select
                       value={purchaseForm.ingredientId}
                       onChange={e => setPurchaseForm(f => ({ ...f, ingredientId: Number(e.target.value) }))}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white appearance-none cursor-pointer focus:border-primary/50 focus:outline-none transition-colors [&>option]:bg-[#0d0e12] [&>option]:text-white"
+                      className="w-full px-4 py-3 bg-ink/5 border border-ink/10 rounded-xl text-ink appearance-none cursor-pointer focus:border-primary/50 focus:outline-none transition-colors [&>option]:bg-raised [&>option]:text-ink"
                     >
                       <option value={0}>— Seleccionar —</option>
                       {ingredients.map(i => (
                         <option key={i.id} value={i.id}>{i.name} ({i.unit.toLowerCase()})</option>
                       ))}
                     </select>
-                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
+                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/40 pointer-events-none" />
                   </div>
                 </div>
 
                 {/* Supplier Select */}
                 <div>
-                  <label className="text-white/50 text-xs font-label uppercase tracking-widest block mb-2">Proveedor</label>
+                  <label className="text-ink/50 text-xs font-label uppercase tracking-widest block mb-2">Proveedor</label>
                   <div className="relative">
                     <select
                       value={purchaseForm.supplierId}
                       onChange={e => setPurchaseForm(f => ({ ...f, supplierId: Number(e.target.value) }))}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white appearance-none cursor-pointer focus:border-primary/50 focus:outline-none transition-colors [&>option]:bg-[#0d0e12] [&>option]:text-white"
+                      className="w-full px-4 py-3 bg-ink/5 border border-ink/10 rounded-xl text-ink appearance-none cursor-pointer focus:border-primary/50 focus:outline-none transition-colors [&>option]:bg-raised [&>option]:text-ink"
                     >
                       <option value={0}>— Seleccionar —</option>
                       {suppliers.map(s => (
                         <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
                     </select>
-                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
+                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/40 pointer-events-none" />
                   </div>
                 </div>
 
                 {/* Quantity + Total Cost */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-white/50 text-xs font-label uppercase tracking-widest block mb-2">Cantidad</label>
+                    <label className="text-ink/50 text-xs font-label uppercase tracking-widest block mb-2">Cantidad</label>
                     <input
                       type="number"
                       value={purchaseForm.quantity}
                       onChange={e => setPurchaseForm(f => ({ ...f, quantity: e.target.value }))}
                       placeholder="0"
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white font-mono focus:border-primary/50 focus:outline-none transition-colors placeholder:text-white/20"
+                      className="w-full px-4 py-3 bg-ink/5 border border-ink/10 rounded-xl text-ink font-mono focus:border-primary/50 focus:outline-none transition-colors placeholder:text-ink/20"
                     />
                   </div>
                   <div>
-                    <label className="text-white/50 text-xs font-label uppercase tracking-widest block mb-2">Costo Total $</label>
+                    <label className="text-ink/50 text-xs font-label uppercase tracking-widest block mb-2">Costo Total $</label>
                     <input
                       type="number"
                       value={purchaseForm.totalCost}
                       onChange={e => setPurchaseForm(f => ({ ...f, totalCost: e.target.value }))}
                       placeholder="0.00"
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white font-mono focus:border-primary/50 focus:outline-none transition-colors placeholder:text-white/20"
+                      className="w-full px-4 py-3 bg-ink/5 border border-ink/10 rounded-xl text-ink font-mono focus:border-primary/50 focus:outline-none transition-colors placeholder:text-ink/20"
                     />
                   </div>
                 </div>
 
                 {/* Unit cost preview */}
                 {purchaseForm.quantity && purchaseForm.totalCost && (
-                  <div className="bg-white/5 rounded-xl p-3 border border-white/10">
-                    <span className="text-white/40 text-xs">Costo unitario: </span>
+                  <div className="bg-ink/5 rounded-xl p-3 border border-ink/10">
+                    <span className="text-ink/40 text-xs">Costo unitario: </span>
                     <span className="font-mono text-primary font-bold">
                       ${(Number(purchaseForm.totalCost) / Number(purchaseForm.quantity)).toFixed(4)}
                     </span>
@@ -555,13 +610,13 @@ export function InventoryPage() {
 
                 {/* Notes */}
                 <div>
-                  <label className="text-white/50 text-xs font-label uppercase tracking-widest block mb-2">Notas (opcional)</label>
+                  <label className="text-ink/50 text-xs font-label uppercase tracking-widest block mb-2">Notas (opcional)</label>
                   <input
                     type="text"
                     value={purchaseForm.notes}
                     onChange={e => setPurchaseForm(f => ({ ...f, notes: e.target.value }))}
                     placeholder="Factura, lote, etc."
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:border-primary/50 focus:outline-none transition-colors placeholder:text-white/20"
+                    className="w-full px-4 py-3 bg-ink/5 border border-ink/10 rounded-xl text-ink focus:border-primary/50 focus:outline-none transition-colors placeholder:text-ink/20"
                   />
                 </div>
 
@@ -574,7 +629,7 @@ export function InventoryPage() {
                 <button
                   onClick={handlePurchase}
                   disabled={purchaseSubmitting || !purchaseForm.ingredientId || !purchaseForm.supplierId || !purchaseForm.quantity || !purchaseForm.totalCost}
-                  className="w-full py-4 rounded-xl bg-gradient-to-r from-secondary/80 to-[#1b9a73] text-[#0a0b0e] font-bold text-sm shadow-[0_0_20px_rgba(54,255,196,0.3)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
+                  className="w-full py-4 rounded-xl bg-cta-alt text-on-secondary font-bold text-sm glow-secondary hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
                 >
                   {purchaseSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send className="w-4 h-4" /> Registrar Compra</>}
                 </button>
@@ -583,13 +638,13 @@ export function InventoryPage() {
           </motion.div>
 
           {/* Current Stock Summary */}
-          <div className="flex-1 glass-panel overflow-auto border-white/5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full">
-            <div className="p-4 border-b border-white/10 sticky top-0 bg-[#0d0e12]/95 backdrop-blur-sm z-10">
-              <p className="text-white/50 text-xs font-label uppercase tracking-widest">Stock actual — referencia rápida</p>
+          <div className="flex-1 glass-panel overflow-auto border-ink/5 scrollbar-thin min-h-[16rem]">
+            <div className="p-4 border-b border-ink/10 sticky top-0 bg-raised/95 backdrop-blur-sm z-10">
+              <p className="text-ink/50 text-xs font-label uppercase tracking-widest">Stock actual — referencia rápida</p>
             </div>
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-white/10 text-white/40 font-label text-[10px] uppercase tracking-widest">
+                <tr className="border-b border-ink/10 text-ink/40 font-label text-[10px] uppercase tracking-widest">
                   <th className="py-3 px-4 font-medium">Ingrediente</th>
                   <th className="py-3 px-4 font-medium">Stock</th>
                   <th className="py-3 px-4 font-medium">Costo/U</th>
@@ -600,9 +655,9 @@ export function InventoryPage() {
                 {ingredients.map(item => {
                   const isLow = Number(item.currentStock) <= Number(item.minStock);
                   return (
-                    <tr key={item.id} className={`border-b border-white/5 ${isLow ? 'bg-error/5' : ''}`}>
-                      <td className="py-2 px-4 text-white text-xs">{item.name}</td>
-                      <td className="py-2 px-4 font-mono text-white/70 text-xs">{Number(item.currentStock).toLocaleString()} {item.unit.toLowerCase()}</td>
+                    <tr key={item.id} className={`border-b border-ink/5 ${isLow ? 'bg-error/5' : ''}`}>
+                      <td className="py-2 px-4 text-ink text-xs">{item.name}</td>
+                      <td className="py-2 px-4 font-mono text-ink/70 text-xs">{Number(item.currentStock).toLocaleString()} {item.unit.toLowerCase()}</td>
                       <td className="py-2 px-4 font-mono text-secondary text-xs">${Number(item.currentCostPerUnit).toFixed(4)}</td>
                       <td className="py-2 px-4 text-center">
                         {isLow ? <AlertTriangle className="w-3.5 h-3.5 text-error inline" /> : <CheckCircle2 className="w-3.5 h-3.5 text-secondary inline" />}
@@ -617,54 +672,42 @@ export function InventoryPage() {
       )}
       {/* ═══ ADJUSTMENT MODAL ═══ */}
       {adjustModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setAdjustModal(null)}>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            onClick={e => e.stopPropagation()}
-            className="glass-panel p-6 w-full max-w-md border-t-2 border-t-primary"
-          >
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-headline text-xl font-bold text-white">Ajuste de Inventario</h3>
-              <button onClick={() => setAdjustModal(null)} className="text-white/40 hover:text-white"><X className="w-5 h-5" /></button>
-            </div>
+        <Modal title="Ajuste de Inventario" onClose={() => setAdjustModal(null)}>
+          <p className="text-primary font-medium mb-4">{adjustModal.name} <span className="text-ink/40 text-sm">({Number(adjustModal.currentStock).toLocaleString()} {adjustModal.unit.toLowerCase()} actual)</span></p>
 
-            <p className="text-primary font-medium mb-4">{adjustModal.name} <span className="text-white/40 text-sm">({Number(adjustModal.currentStock).toLocaleString()} {adjustModal.unit.toLowerCase()} actual)</span></p>
-
-            {/* Type selector */}
-            <div className="flex gap-2 mb-4">
-              {([['IN', 'Entrada'], ['OUT', 'Salida (Merma)'], ['ADJUSTMENT', 'Ajuste Exacto']] as const).map(([type, label]) => (
-                <button
-                  key={type}
-                  onClick={() => setAdjustType(type)}
-                  className={`flex-1 py-2 rounded-lg text-xs font-label uppercase tracking-wider border transition-all ${adjustType === type ? 'bg-primary/20 border-primary text-primary' : 'bg-white/5 border-white/10 text-white/50 hover:text-white'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="text-white/50 text-xs font-label uppercase tracking-widest block mb-2">
-                  {adjustType === 'ADJUSTMENT' ? 'Nuevo stock exacto' : 'Cantidad'}
-                </label>
-                <input type="number" value={adjustQty} onChange={e => setAdjustQty(e.target.value)} placeholder="0"
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white font-mono focus:border-primary/50 focus:outline-none placeholder:text-white/20" />
-              </div>
-              <div>
-                <label className="text-white/50 text-xs font-label uppercase tracking-widest block mb-2">Razón</label>
-                <input type="text" value={adjustReason} onChange={e => setAdjustReason(e.target.value)} placeholder="Merma, donación, conteo físico..."
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:border-primary/50 focus:outline-none placeholder:text-white/20" />
-              </div>
-              <button onClick={handleAdjustment} disabled={adjustSubmitting || !adjustQty}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-primary to-secondary text-[#0a0b0e] font-bold shadow-[0_0_20px_rgba(54,255,196,0.3)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+          {/* Type selector */}
+          <div className="flex gap-2 mb-4">
+            {([['IN', 'Entrada'], ['OUT', 'Salida (Merma)'], ['ADJUSTMENT', 'Ajuste Exacto']] as const).map(([type, label]) => (
+              <button
+                key={type}
+                onClick={() => setAdjustType(type)}
+                className={`flex-1 py-2.5 px-1 rounded-lg text-xs font-label uppercase tracking-wider border transition-all ${adjustType === type ? 'bg-primary/20 border-primary text-primary' : 'bg-ink/5 border-ink/10 text-ink/50 hover:text-ink'}`}
               >
-                {adjustSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <><ArrowUpDown className="w-4 h-4" /> Aplicar Ajuste</>}
+                {label}
               </button>
+            ))}
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-ink/50 text-xs font-label uppercase tracking-widest block mb-2">
+                {adjustType === 'ADJUSTMENT' ? 'Nuevo stock exacto' : 'Cantidad'}
+              </label>
+              <input type="number" value={adjustQty} onChange={e => setAdjustQty(e.target.value)} placeholder="0"
+                className="w-full px-4 py-3 bg-ink/5 border border-ink/10 rounded-xl text-ink font-mono focus:border-primary/50 focus:outline-none placeholder:text-ink/20" />
             </div>
-          </motion.div>
-        </div>
+            <div>
+              <label className="text-ink/50 text-xs font-label uppercase tracking-widest block mb-2">Razón</label>
+              <input type="text" value={adjustReason} onChange={e => setAdjustReason(e.target.value)} placeholder="Merma, donación, conteo físico..."
+                className="w-full px-4 py-3 bg-ink/5 border border-ink/10 rounded-xl text-ink focus:border-primary/50 focus:outline-none placeholder:text-ink/20" />
+            </div>
+            <button onClick={handleAdjustment} disabled={adjustSubmitting || !adjustQty}
+              className="w-full py-3 rounded-xl bg-cta text-on-primary font-bold glow-secondary hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {adjustSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <><ArrowUpDown className="w-4 h-4" /> Aplicar Ajuste</>}
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );
