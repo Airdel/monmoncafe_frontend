@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, Plus, Send, X, Save, Trash2, ArrowUpDown } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, Plus, Send, X, Save, Trash2, ArrowUpDown, type LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
+import { getErrorMessage } from '../lib/errors';
 import * as motion from 'motion/react-client';
 
 interface Ingredient {
@@ -19,6 +20,11 @@ interface Product {
   name: string;
   sellingPrice: string;
   category?: { name: string };
+}
+
+interface ProductWithRecipe extends Product {
+  size?: string | null;
+  recipeIngredients?: RecipeIngredient[];
 }
 
 interface RecipeIngredient {
@@ -49,7 +55,7 @@ export function InventoryPage() {
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
   const [recipe, setRecipe] = useState<RecipeIngredient[]>([]);
   const [recipeLoading, setRecipeLoading] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [selectedProduct, setSelectedProduct] = useState<ProductWithRecipe | null>(null);
 
   // Recipe editing
   const [editingRecipe, setEditingRecipe] = useState(false);
@@ -83,8 +89,7 @@ export function InventoryPage() {
 
   // Load recipe when product selected
   useEffect(() => {
-    if (!selectedProductId) { setRecipe([]); setSelectedProduct(null); return; }
-    setRecipeLoading(true);
+    if (!selectedProductId) return;
     api.get(`/products/${selectedProductId}/recipe`)
       .then(res => {
         const data = res.data.data || res.data;
@@ -124,8 +129,8 @@ export function InventoryPage() {
       // Refresh ingredients
       const res = await api.get('/inventory/ingredients');
       setIngredients(res.data.data || res.data);
-    } catch (err: any) {
-      alert('Error: ' + (err.response?.data?.message || err.message));
+    } catch (err) {
+      alert('Error: ' + getErrorMessage(err));
     } finally {
       setPurchaseSubmitting(false);
     }
@@ -145,8 +150,8 @@ export function InventoryPage() {
       setAdjustModal(null); setAdjustQty(''); setAdjustReason('');
       const res = await api.get('/inventory/ingredients');
       setIngredients(res.data.data || res.data);
-    } catch (err: any) {
-      alert('Error: ' + (err.response?.data?.message || err.message));
+    } catch (err) {
+      alert('Error: ' + getErrorMessage(err));
     } finally {
       setAdjustSubmitting(false);
     }
@@ -170,14 +175,14 @@ export function InventoryPage() {
       setSelectedProduct(data);
       setRecipe(data?.recipeIngredients || []);
       setEditingRecipe(false);
-    } catch (err: any) {
-      alert('Error: ' + (err.response?.data?.message || err.message));
+    } catch (err) {
+      alert('Error: ' + getErrorMessage(err));
     } finally {
       setRecipeSaving(false);
     }
   };
 
-  const tabs: { key: Tab; label: string; icon: any }[] = [
+  const tabs: { key: Tab; label: string; icon: LucideIcon }[] = [
     { key: 'stock', label: 'Stock', icon: Package },
     { key: 'recipes', label: 'Recetas', icon: SlidersHorizontal },
     { key: 'purchases', label: 'Compras', icon: ShoppingCart },
@@ -327,7 +332,12 @@ export function InventoryPage() {
               <div className="relative">
                 <select
                   value={selectedProductId || ''}
-                  onChange={e => setSelectedProductId(Number(e.target.value) || null)}
+                  onChange={e => {
+                    const id = Number(e.target.value) || null;
+                    setSelectedProductId(id);
+                    setRecipeLoading(!!id);
+                    if (!id) { setRecipe([]); setSelectedProduct(null); }
+                  }}
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white appearance-none cursor-pointer focus:border-primary/50 focus:outline-none transition-colors [&>option]:bg-[#0d0e12] [&>option]:text-white"
                 >
                   <option value="">— Elige un producto —</option>

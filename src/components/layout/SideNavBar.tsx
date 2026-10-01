@@ -1,7 +1,9 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Coffee, Package, LineChart, Sparkles, HelpCircle, LogOut } from 'lucide-react';
+import { LayoutDashboard, Coffee, Package, LineChart, LogOut } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { useAuthStore } from '../../store/auth';
+import { api } from '../../lib/api';
 
 function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
@@ -9,13 +11,26 @@ function cn(...inputs: (string | undefined | null | false)[]) {
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/' },
-  { id: 'pos', label: 'POS', icon: Coffee, path: '/pos' },
-  { id: 'inventory', label: 'Inventory', icon: Package, path: '/inventory' },
-  { id: 'finance', label: 'Finance', icon: LineChart, path: '/finance' },
-  { id: 'ai', label: 'AI Insights', icon: Sparkles, path: '/ai' },
+  { id: 'pos', label: 'Punto de venta', icon: Coffee, path: '/pos' },
+  { id: 'inventory', label: 'Inventario', icon: Package, path: '/inventory' },
+  { id: 'finance', label: 'Finanzas', icon: LineChart, path: '/finance' },
 ];
 
+const ROLE_LABELS: Record<string, string> = {
+  ADMIN: 'Administrador',
+  SUPERVISOR: 'Supervisor',
+  CASHIER: 'Cajero',
+};
+
 export function SideNavBar() {
+  const user = useAuthStore(state => state.user);
+  const logout = useAuthStore(state => state.logout);
+
+  const handleLogout = () => {
+    // Invalidate the refresh token server-side; log out locally regardless
+    api.post('/auth/logout').catch(() => {}).finally(logout);
+  };
+
   return (
     <aside className="w-64 h-screen fixed left-0 top-0 flex flex-col justify-between py-6 px-4 border-r border-surface-border bg-[#0a0b0e]/80 backdrop-blur-3xl z-40">
       <div>
@@ -31,6 +46,7 @@ export function SideNavBar() {
               <NavLink
                 key={item.id}
                 to={item.path}
+                end={item.path === '/'}
                 className={({ isActive }) => cn(
                   "w-full flex items-center space-x-4 px-4 py-3 rounded-xl transition-all duration-300",
                   isActive 
@@ -50,14 +66,19 @@ export function SideNavBar() {
         </nav>
       </div>
 
-      <div className="space-y-2">
-        <button className="w-full flex items-center space-x-4 px-4 py-3 rounded-xl text-white/50 hover:text-white hover:bg-white/5 transition-all">
-          <HelpCircle className="w-5 h-5" />
-          <span className="font-medium">Support</span>
-        </button>
-        <button className="w-full flex items-center space-x-4 px-4 py-3 rounded-xl text-error/80 hover:text-error hover:bg-error/10 transition-all">
+      <div className="space-y-3">
+        {user && (
+          <div className="px-4">
+            <p className="text-white font-medium truncate">{user.name}</p>
+            <p className="text-white/40 text-xs font-label uppercase tracking-widest">{ROLE_LABELS[user.role] ?? user.role}</p>
+          </div>
+        )}
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center space-x-4 px-4 py-3 rounded-xl text-error/80 hover:text-error hover:bg-error/10 transition-all"
+        >
           <LogOut className="w-5 h-5" />
-          <span className="font-medium">Logout</span>
+          <span className="font-medium">Cerrar sesión</span>
         </button>
       </div>
     </aside>

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Coffee, Lock, Mail, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
+import { getErrorMessage } from '../lib/errors';
 import { useAuthStore } from '../store/auth';
 import * as motion from 'motion/react-client';
 
 export function LoginPage() {
-  const [email, setEmail] = useState('admin@cafeteria.com');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const setAuth = useAuthStore((state) => state.setAuth);
@@ -21,8 +22,8 @@ export function LoginPage() {
       // NestJS TransformInterceptor wraps the response in a 'data' object
       const { user, accessToken, refreshToken } = res.data.data ? res.data.data : res.data;
       setAuth(user, accessToken, refreshToken);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Invalid credentials');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Credenciales inválidas'));
     } finally {
       setLoading(false);
     }
@@ -58,7 +59,7 @@ export function LoginPage() {
 
           <div className="space-y-4">
             <div>
-              <label className="block text-white/60 text-xs font-label uppercase tracking-wider mb-2">Email</label>
+              <label className="block text-white/60 text-xs font-label uppercase tracking-wider mb-2">Correo</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
                 <input 
@@ -66,13 +67,13 @@ export function LoginPage() {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   className="w-full bg-[#0a0b0e]/50 border border-white/10 rounded-xl py-3 pl-11 pr-4 text-white placeholder-white/20 focus:outline-none focus:border-primary/50 focus:bg-white/5 transition-all"
-                  placeholder="admin@cafeteria.com"
+                  placeholder="correo@ejemplo.com"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-white/60 text-xs font-label uppercase tracking-wider mb-2">Password</label>
+              <label className="block text-white/60 text-xs font-label uppercase tracking-wider mb-2">Contraseña</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
                 <input 
@@ -90,7 +91,7 @@ export function LoginPage() {
             disabled={loading}
             className="w-full py-4 rounded-xl bg-gradient-to-r from-primary to-[#00a8b3] text-[#0a0b0e] font-bold text-sm shadow-[0_0_20px_rgba(0,219,233,0.3)] hover:scale-[1.02] transition-transform flex items-center justify-center disabled:opacity-70 disabled:hover:scale-100"
           >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'SYSTEM LOGIN'}
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Entrar'}
           </button>
         </form>
       </motion.div>

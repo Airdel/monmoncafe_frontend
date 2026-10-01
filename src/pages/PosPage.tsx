@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Minus, Plus, Banknote, CreditCard, Zap, Loader2 } from 'lucide-react';
+import { Minus, Plus, Banknote, ArrowLeftRight, Zap, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
+import { formatMoney } from '../lib/format';
+import { getErrorMessage } from '../lib/errors';
 import * as motion from 'motion/react-client';
 
 interface Category {
@@ -71,21 +73,19 @@ export function PosPage() {
         items: cart.map(item => ({ productId: item.product.id, quantity: item.quantity })),
         paymentMethod
       });
-      alert('Sale completed successfully!');
+      alert('¡Venta registrada!');
       setCart([]);
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      alert('Error processing sale: ' + (err.response?.data?.message || err.message));
+      alert('Error al registrar la venta: ' + getErrorMessage(err));
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // Calculations
-  const subtotal = cart.reduce((acc, item) => acc + (Number(item.product.sellingPrice) * item.quantity), 0);
-  const tax = subtotal * 0.08; // 8% tax
-  const tip = subtotal * 0.15; // 15% tip
-  const total = subtotal + tax + tip;
+  // Matches what the backend charges: sum of selling prices, no tax or tip
+  const total = cart.reduce((acc, item) => acc + (Number(item.product.sellingPrice) * item.quantity), 0);
+  const itemCount = cart.reduce((acc, item) => acc + item.quantity, 0);
 
   // Filter products
   const filteredProducts = activeCategory === 'all' 
@@ -108,7 +108,7 @@ export function PosPage() {
                 : 'bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/10'
             }`}
           >
-            All Items
+            Todo
           </button>
           {categories.map((cat) => (
             <button
@@ -140,11 +140,6 @@ export function PosPage() {
               onClick={() => addToCart(product)}
               className="glass-panel group cursor-pointer border-white/5 hover:border-primary/50 transition-colors flex flex-col h-64 overflow-hidden relative"
             >
-              {product.name.includes('Caliente') && (
-                <div className="absolute top-2 right-2 z-10 bg-error/90 text-background text-[10px] font-label font-bold uppercase px-2 py-0.5 rounded shadow-[0_0_10px_rgba(255,180,171,0.5)]">
-                  HOT
-                </div>
-              )}
               
               <div className="h-40 w-full overflow-hidden bg-black/40">
                 <div className="w-full h-full flex items-center justify-center bg-white/5 text-white/20 group-hover:scale-110 transition-all duration-500">
@@ -154,7 +149,7 @@ export function PosPage() {
               
               <div className="p-4 flex-1 flex flex-col justify-between">
                 <h3 className="font-headline font-bold text-white text-sm leading-tight line-clamp-2">{product.name}</h3>
-                <p className="font-mono text-secondary font-medium text-lg">${Number(product.sellingPrice).toFixed(2)}</p>
+                <p className="font-mono text-secondary font-medium text-lg">{formatMoney(Number(product.sellingPrice))}</p>
               </div>
             </motion.div>
           ))}
@@ -165,12 +160,8 @@ export function PosPage() {
       <div className="w-full lg:w-[320px] xl:w-[380px] shrink-0 flex flex-col h-full bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-6 relative z-20">
         
         {/* Order Header */}
-        <div className="flex justify-between items-end mb-6">
-          <div>
-            <h2 className="font-headline text-2xl font-bold text-white">Current Order</h2>
-            <p className="text-white/40 text-xs font-label uppercase tracking-widest mt-1">Walk-in</p>
-          </div>
-          <span className="font-mono text-white/50 text-sm">#8829</span>
+        <div className="mb-6">
+          <h2 className="font-headline text-2xl font-bold text-white">Orden actual</h2>
         </div>
 
         {/* Order Items */}
@@ -184,9 +175,8 @@ export function PosPage() {
                 <div className="flex-1">
                   <div className="flex justify-between items-start">
                     <h4 className="font-bold text-white text-sm line-clamp-1">{item.product.name}</h4>
-                    <span className="font-mono text-white/80">${(Number(item.product.sellingPrice) * item.quantity).toFixed(2)}</span>
+                    <span className="font-mono text-white/80">{formatMoney(Number(item.product.sellingPrice) * item.quantity)}</span>
                   </div>
-                  <p className="text-white/40 text-[10px] mb-2 italic">Standard Prep</p>
                   <div className="flex items-center gap-3">
                     <button 
                       onClick={() => removeFromCart(item.product.id)}
@@ -207,31 +197,19 @@ export function PosPage() {
             ))
           ) : (
             <div className="h-full flex items-center justify-center">
-              <p className="text-white/30 font-label text-sm uppercase tracking-widest">Cart is empty</p>
+              <p className="text-white/30 font-label text-sm uppercase tracking-widest">Sin productos</p>
             </div>
           )}
         </div>
 
         {/* Totals & Checkout */}
         <div className="pt-6 border-t border-white/10 mt-4 shrink-0">
-          <div className="space-y-2 mb-4">
-            <div className="flex justify-between text-sm">
-              <span className="text-white/40">Subtotal</span>
-              <span className="font-mono text-white/80">${subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-white/40">Tax (8%)</span>
-              <span className="font-mono text-white/80">${tax.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-white/40">Service Tip (15%)</span>
-              <span className="font-mono text-secondary">${tip.toFixed(2)}</span>
-            </div>
-          </div>
-
           <div className="flex justify-between items-end mb-4">
-            <span className="font-headline text-2xl font-bold text-white">Total</span>
-            <span className="font-headline text-4xl font-bold text-secondary glow-mint">${total.toFixed(2)}</span>
+            <div>
+              <span className="font-headline text-2xl font-bold text-white">Total</span>
+              <p className="text-white/40 text-xs font-label">{itemCount} {itemCount === 1 ? 'producto' : 'productos'}</p>
+            </div>
+            <span className="font-headline text-4xl font-bold text-secondary">{formatMoney(total)}</span>
           </div>
 
           {/* Payment Methods */}
@@ -241,14 +219,14 @@ export function PosPage() {
               className={`flex-1 py-2 border rounded-xl flex flex-col items-center gap-1 transition-colors ${paymentMethod === 'CASH' ? 'bg-primary/20 border-primary text-primary' : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:text-white'}`}
             >
               <Banknote className="w-4 h-4" />
-              <span className="font-label text-[10px] uppercase tracking-widest font-semibold">Cash</span>
+              <span className="font-label text-[10px] uppercase tracking-widest font-semibold">Efectivo</span>
             </button>
             <button 
               onClick={() => setPaymentMethod('TRANSFER')}
               className={`flex-1 py-2 border rounded-xl flex flex-col items-center gap-1 transition-colors ${paymentMethod === 'TRANSFER' ? 'bg-primary/20 border-primary text-primary' : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:text-white'}`}
             >
-              <CreditCard className="w-4 h-4" />
-              <span className="font-label text-[10px] uppercase tracking-widest font-semibold">Card</span>
+              <ArrowLeftRight className="w-4 h-4" />
+              <span className="font-label text-[10px] uppercase tracking-widest font-semibold">Transferencia</span>
             </button>
           </div>
 
@@ -258,7 +236,7 @@ export function PosPage() {
             disabled={cart.length === 0 || isProcessing}
             className="w-full py-4 rounded-xl bg-gradient-to-r from-primary to-secondary text-[#0a0b0e] font-bold text-lg shadow-[0_0_20px_rgba(54,255,196,0.3)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
           >
-             {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Zap className="w-5 h-5 fill-current" /> PAY NOW</>}
+             {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Zap className="w-5 h-5 fill-current" /> Cobrar</>}
           </button>
         </div>
       </div>
