@@ -21,21 +21,21 @@ export function FinancePage() {
   ];
 
   return (
-    <div className="h-full flex flex-col gap-6 animate-in fade-in duration-500 max-w-5xl mx-auto pb-8">
+    <div className="flex flex-col gap-4 sm:gap-6 max-w-5xl mx-auto pb-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="font-headline text-3xl font-bold text-white tracking-tight">Finanzas</h1>
-          <p className="text-white/50 text-sm font-label uppercase tracking-wider mt-1">Corte de caja y gastos fijos</p>
+          <h1 className="font-headline text-2xl sm:text-3xl font-bold text-ink tracking-tight">Finanzas</h1>
+          <p className="text-ink/50 text-sm font-label uppercase tracking-wider mt-1">Corte de caja y gastos fijos</p>
         </div>
 
-        <div className="flex bg-white/5 rounded-xl p-1 border border-white/10">
+        <div className="flex w-full sm:w-auto bg-ink/5 rounded-xl p-1 border border-ink/10 overflow-x-auto scrollbar-none">
           {tabs.map(tab => {
             const Icon = tab.icon;
             return (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === tab.key ? 'bg-primary/20 text-primary' : 'text-white/50 hover:text-white'}`}
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 whitespace-nowrap rounded-lg text-sm font-medium transition-all ${activeTab === tab.key ? 'bg-primary/20 text-primary' : 'text-ink/50 hover:text-ink'}`}
               >
                 <Icon className="w-4 h-4" />
                 {tab.label}

@@ -6,7 +6,8 @@ import { formatMoney } from '../../lib/format';
 import { unwrap } from '../../lib/unwrap';
 import { inputClass, labelClass, primaryButtonClass } from './styles';
 import { FREQUENCY_LABELS, toDailyAmount, type ExpenseFrequency, type ExpenseSummary, type FixedExpense } from './types';
-import { Modal, StatCard } from './ui';
+import { Modal } from '../ui/Modal';
+import { StatCard } from './ui';
 
 interface ExpenseForm {
   name: string;
@@ -105,12 +106,12 @@ export function ExpensesTab() {
         <StatCard label="Equivalente mensual" value={formatMoney(summary?.monthlyTotal ?? 0)} />
         <div className="glass-panel p-5 flex flex-col justify-between gap-3">
           <button onClick={openCreate} className={primaryButtonClass}><Plus className="w-5 h-5" /> Nuevo gasto</button>
-          <label className="flex items-center gap-2 text-white/60 text-sm cursor-pointer select-none">
+          <label className="flex items-center gap-2 text-ink/60 text-sm cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showInactive}
               onChange={e => { setLoading(true); setShowInactive(e.target.checked); }}
-              className="accent-[#00Dbe9]"
+              className="accent-primary"
             />
             Mostrar desactivados
           </label>
@@ -122,14 +123,14 @@ export function ExpensesTab() {
       ) : error ? (
         <div className="glass-panel p-6 text-error">{error}</div>
       ) : expenses.length === 0 ? (
-        <div className="glass-panel p-10 text-center text-white/50">Aún no registras gastos fijos (renta, luz, sueldos…).</div>
+        <div className="glass-panel p-10 text-center text-ink/50">Aún no registras gastos fijos (renta, luz, sueldos…).</div>
       ) : (
-        <div className="glass-panel divide-y divide-white/5">
+        <div className="glass-panel divide-y divide-ink/5">
           {expenses.map(e => (
-            <div key={e.id} className={`flex items-center gap-4 p-4 ${e.isActive ? '' : 'opacity-50'}`}>
+            <div key={e.id} className={`flex items-center gap-2 sm:gap-4 p-4 ${e.isActive ? '' : 'opacity-50'}`}>
               <div className="flex-1 min-w-0">
-                <p className="text-white font-medium truncate">{e.name}</p>
-                <p className="text-white/40 text-xs font-label mt-0.5">
+                <p className="text-ink font-medium truncate">{e.name}</p>
+                <p className="text-ink/40 text-xs font-label mt-0.5">
                   {formatMoney(e.amount)} {FREQUENCY_LABELS[e.frequency].toLowerCase()}
                   {e.notes ? ` · ${e.notes}` : ''}
                   {!e.isActive && ' · desactivado'}
@@ -137,9 +138,9 @@ export function ExpensesTab() {
               </div>
               <div className="text-right">
                 <p className="text-primary font-semibold">{formatMoney(toDailyAmount(Number(e.amount), e.frequency))}</p>
-                <p className="text-white/40 text-xs font-label">por día</p>
+                <p className="text-ink/40 text-xs font-label">por día</p>
               </div>
-              <button onClick={() => openEdit(e)} className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5" aria-label={`Editar ${e.name}`}>
+              <button onClick={() => openEdit(e)} className="p-2 rounded-lg text-ink/50 hover:text-ink hover:bg-ink/5" aria-label={`Editar ${e.name}`}>
                 <Pencil className="w-4 h-4" />
               </button>
               <button
@@ -169,7 +170,7 @@ export function ExpensesTab() {
               </div>
               <div>
                 <label className={labelClass} htmlFor="expense-frequency">Frecuencia</label>
-                <select id="expense-frequency" value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value as ExpenseFrequency })} className={`${inputClass} [color-scheme:dark]`}>
+                <select id="expense-frequency" value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value as ExpenseFrequency })} className={inputClass}>
                   {(Object.keys(FREQUENCY_LABELS) as ExpenseFrequency[]).map(f => (
                     <option key={f} value={f}>{FREQUENCY_LABELS[f]}</option>
                   ))}
@@ -180,7 +181,7 @@ export function ExpensesTab() {
               <label className={labelClass} htmlFor="expense-notes">Notas (opcional)</label>
               <input id="expense-notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className={inputClass} />
             </div>
-            <p className="text-white/50 text-sm">
+            <p className="text-ink/50 text-sm">
               Equivale a <span className="text-primary font-semibold">{formatMoney(formDaily)}</span> por día en el corte.
             </p>
             <button onClick={save} disabled={saving || !form.name.trim() || form.amount === ''} className={`${primaryButtonClass} w-full`}>

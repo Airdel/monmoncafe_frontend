@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { SideNavBar } from './components/layout/SideNavBar';
+import { BottomNav, MobileTopBar } from './components/layout/MobileNav';
+import { ThemePicker } from './components/ui/ThemePicker';
 import { InventoryPage } from './pages/InventoryPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { PosPage } from './pages/PosPage';
@@ -9,17 +12,27 @@ import { useAuthStore } from './store/auth';
 
 function App() {
   const { accessToken } = useAuthStore();
+  const [showThemes, setShowThemes] = useState(false);
+  const openThemes = () => setShowThemes(true);
+
+  const themePicker = showThemes && <ThemePicker onClose={() => setShowThemes(false)} />;
 
   if (!accessToken) {
-    return <LoginPage />;
+    return (
+      <>
+        <LoginPage onOpenThemes={openThemes} />
+        {themePicker}
+      </>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-background text-white pl-64 overflow-hidden">
-      <SideNavBar />
-      
-      <main className="w-full h-screen relative flex flex-col">
-        <div className="pt-8 px-8 pb-8 flex-1 overflow-y-auto">
+    <div className="h-[100dvh] flex text-ink overflow-hidden">
+      <SideNavBar onOpenThemes={openThemes} />
+
+      <div className="flex-1 min-w-0 flex flex-col">
+        <MobileTopBar onOpenThemes={openThemes} />
+        <main className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/inventory" element={<InventoryPage />} />
@@ -27,8 +40,11 @@ function App() {
             <Route path="/finance" element={<FinancePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </div>
-      </main>
+        </main>
+        <BottomNav />
+      </div>
+
+      {themePicker}
     </div>
   )
 }

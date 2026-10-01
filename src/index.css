@@ -1,32 +1,280 @@
-@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700;800&family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design tokens. Every color is an "R G B" triplet so Tailwind can apply
+ * opacity modifiers (bg-primary/20). Components only use the semantic names
+ * from tailwind.config.js; a theme is just a different set of values here.
+ * The list of themes shown in the app lives in src/lib/themes.ts.
+ *
+ * Themes are scoped to [data-theme] (not only :root) so the theme picker can
+ * render live previews of each one.
+ */
+:root,
+[data-theme='fresa'] {
+  color-scheme: light;
+  --c-canvas: 255 246 242;
+  --c-ink: 74 44 58;
+  --c-shade: 74 44 58;
+  --c-raised: 255 255 255;
+  --c-card: 255 255 255;
+  --card-alpha: 0.82;
+  --c-nav: 255 236 236;
+  --c-primary: 204 64 122;
+  --c-secondary: 32 128 98;
+  --c-accent: 132 96 190;
+  --c-warning: 176 110 10;
+  --c-error: 200 52 72;
+  --c-on-primary: 255 255 255;
+  --c-on-secondary: 255 255 255;
+  --c-cta-from: 232 104 152;
+  --c-cta-to: 204 64 122;
+  --c-cta-alt-from: 64 160 124;
+  --c-cta-alt-to: 32 128 98;
+  --blob-1: 255 196 214;
+  --blob-2: 196 236 214;
+  --blob-alpha: 0.55;
+  --text-floor: 0.35;
+  --panel-blur: 16px;
+  --panel-shadow: 0 6px 24px -8px rgb(var(--c-primary) / 0.18), 0 1px 2px rgb(var(--c-ink) / 0.04);
+  --glow-strength: 0.22;
+  --glow-offset: 6px;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --font-headline: 'Fredoka Variable', 'Nunito Variable', sans-serif;
+  --font-body: 'Nunito Variable', sans-serif;
+  --font-label: 'Nunito Variable', sans-serif;
+  --font-mono: 'Nunito Variable', ui-sans-serif, sans-serif;
+  --theme-color: #fff6f2;
+}
+
+[data-theme='matcha'] {
+  color-scheme: light;
+  --c-canvas: 245 247 236;
+  --c-ink: 44 58 40;
+  --c-shade: 44 58 40;
+  --c-raised: 255 255 255;
+  --c-card: 255 255 255;
+  --card-alpha: 0.82;
+  --c-nav: 234 241 220;
+  --c-primary: 74 122 48;
+  --c-secondary: 30 120 112;
+  --c-accent: 176 92 140;
+  --c-warning: 170 108 10;
+  --c-error: 192 56 56;
+  --c-on-primary: 255 255 255;
+  --c-on-secondary: 255 255 255;
+  --c-cta-from: 112 160 80;
+  --c-cta-to: 74 122 48;
+  --c-cta-alt-from: 60 150 140;
+  --c-cta-alt-to: 30 120 112;
+  --blob-1: 206 230 176;
+  --blob-2: 250 220 200;
+  --blob-alpha: 0.55;
+  --text-floor: 0.35;
+  --panel-blur: 16px;
+  --panel-shadow: 0 6px 24px -8px rgb(var(--c-primary) / 0.18), 0 1px 2px rgb(var(--c-ink) / 0.04);
+  --glow-strength: 0.22;
+  --glow-offset: 6px;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --font-headline: 'Fredoka Variable', 'Nunito Variable', sans-serif;
+  --font-body: 'Nunito Variable', sans-serif;
+  --font-label: 'Nunito Variable', sans-serif;
+  --font-mono: 'Nunito Variable', ui-sans-serif, sans-serif;
+  --theme-color: #f5f7ec;
+}
+
+[data-theme='lavanda'] {
+  color-scheme: light;
+  --c-canvas: 248 245 255;
+  --c-ink: 52 42 84;
+  --c-shade: 52 42 84;
+  --c-raised: 255 255 255;
+  --c-card: 255 255 255;
+  --card-alpha: 0.82;
+  --c-nav: 238 232 255;
+  --c-primary: 114 82 204;
+  --c-secondary: 26 128 112;
+  --c-accent: 196 64 128;
+  --c-warning: 170 108 10;
+  --c-error: 196 52 80;
+  --c-on-primary: 255 255 255;
+  --c-on-secondary: 255 255 255;
+  --c-cta-from: 150 120 232;
+  --c-cta-to: 114 82 204;
+  --c-cta-alt-from: 56 158 140;
+  --c-cta-alt-to: 26 128 112;
+  --blob-1: 214 200 255;
+  --blob-2: 255 208 230;
+  --blob-alpha: 0.55;
+  --text-floor: 0.35;
+  --panel-blur: 16px;
+  --panel-shadow: 0 6px 24px -8px rgb(var(--c-primary) / 0.2), 0 1px 2px rgb(var(--c-ink) / 0.04);
+  --glow-strength: 0.22;
+  --glow-offset: 6px;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --font-headline: 'Fredoka Variable', 'Nunito Variable', sans-serif;
+  --font-body: 'Nunito Variable', sans-serif;
+  --font-label: 'Nunito Variable', sans-serif;
+  --font-mono: 'Nunito Variable', ui-sans-serif, sans-serif;
+  --theme-color: #f8f5ff;
+}
+
+[data-theme='cafe'] {
+  color-scheme: light;
+  --c-canvas: 250 243 235;
+  --c-ink: 70 48 34;
+  --c-shade: 70 48 34;
+  --c-raised: 255 253 250;
+  --c-card: 255 253 250;
+  --card-alpha: 0.85;
+  --c-nav: 243 230 214;
+  --c-primary: 160 94 48;
+  --c-secondary: 56 124 80;
+  --c-accent: 184 74 100;
+  --c-warning: 168 108 10;
+  --c-error: 188 56 56;
+  --c-on-primary: 255 255 255;
+  --c-on-secondary: 255 255 255;
+  --c-cta-from: 190 124 72;
+  --c-cta-to: 150 86 42;
+  --c-cta-alt-from: 86 156 110;
+  --c-cta-alt-to: 56 124 80;
+  --blob-1: 240 210 176;
+  --blob-2: 255 222 214;
+  --blob-alpha: 0.5;
+  --text-floor: 0.35;
+  --panel-blur: 16px;
+  --panel-shadow: 0 6px 24px -8px rgb(var(--c-primary) / 0.2), 0 1px 2px rgb(var(--c-ink) / 0.05);
+  --glow-strength: 0.22;
+  --glow-offset: 6px;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --font-headline: 'Fredoka Variable', 'Nunito Variable', sans-serif;
+  --font-body: 'Nunito Variable', sans-serif;
+  --font-label: 'Nunito Variable', sans-serif;
+  --font-mono: 'Nunito Variable', ui-sans-serif, sans-serif;
+  --theme-color: #faf3eb;
+}
+
+/* The original dark "glass" look */
+[data-theme='noche'] {
+  color-scheme: dark;
+  --c-canvas: 17 19 24;
+  --c-ink: 255 255 255;
+  --c-shade: 0 0 0;
+  --c-raised: 13 14 18;
+  --c-card: 255 255 255;
+  --card-alpha: 0.05;
+  --c-nav: 10 11 14;
+  --c-primary: 0 219 233;
+  --c-secondary: 54 255 196;
+  --c-accent: 201 160 220;
+  --c-warning: 250 204 21;
+  --c-error: 255 180 171;
+  --c-on-primary: 10 11 14;
+  --c-on-secondary: 10 11 14;
+  --c-cta-from: 0 219 233;
+  --c-cta-to: 0 168 179;
+  --c-cta-alt-from: 43 204 157;
+  --c-cta-alt-to: 27 154 115;
+  --blob-1: 0 219 233;
+  --blob-2: 54 255 196;
+  --blob-alpha: 0.05;
+  --text-floor: 0;
+  --panel-blur: 60px;
+  --panel-shadow: 0 8px 32px 0 rgb(0 0 0 / 0.3);
+  --glow-strength: 0.4;
+  --glow-offset: 0px;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --font-headline: 'Hanken Grotesk Variable', sans-serif;
+  --font-body: 'Inter Variable', sans-serif;
+  --font-label: 'Space Grotesk Variable', monospace;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --theme-color: #111318;
+}
+
 @layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
-    @apply bg-background text-white font-body antialiased min-h-screen;
-    background: radial-gradient(circle at top left, rgba(0, 219, 233, 0.05), transparent 40%),
-                radial-gradient(circle at bottom right, rgba(54, 255, 196, 0.05), transparent 40%),
-                #111318;
+    @apply bg-canvas text-ink font-body antialiased min-h-screen;
+    background:
+      radial-gradient(circle at top left, rgb(var(--blob-1) / var(--blob-alpha)), transparent 40%),
+      radial-gradient(circle at bottom right, rgb(var(--blob-2) / var(--blob-alpha)), transparent 40%),
+      rgb(var(--c-canvas));
     background-attachment: fixed;
+  }
+
+  .font-mono {
+    font-variant-numeric: tabular-nums;
   }
 }
 
 @layer components {
   .glass-panel {
-    @apply bg-white/5 border backdrop-blur-2xl rounded-2xl;
-    /* linear gradient border */
-    border-color: rgba(255, 255, 255, 0.1);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+    @apply border rounded-2xl;
+    background-color: rgb(var(--c-card) / var(--card-alpha));
+    border-color: rgb(var(--c-ink) / 0.08);
+    box-shadow: var(--panel-shadow);
+    -webkit-backdrop-filter: blur(var(--panel-blur));
+    backdrop-filter: blur(var(--panel-blur));
   }
-  
-  .glow-cyan {
-    box-shadow: 0 0 20px rgba(0, 219, 233, 0.4);
+
+  /* Dark theme: neon glow. Light themes: a soft tinted drop shadow. */
+  .glow-primary {
+    box-shadow: 0 var(--glow-offset) 20px rgb(var(--c-primary) / var(--glow-strength));
   }
-  
-  .glow-mint {
-    box-shadow: 0 0 20px rgba(54, 255, 196, 0.4);
+
+  .glow-primary-soft {
+    box-shadow: 0 var(--glow-offset) 15px rgb(var(--c-primary) / calc(var(--glow-strength) * 0.5));
+  }
+
+  .glow-secondary {
+    box-shadow: 0 var(--glow-offset) 20px rgb(var(--c-secondary) / calc(var(--glow-strength) * 0.75));
+  }
+
+  .bg-cta {
+    background-image: linear-gradient(to right, rgb(var(--c-cta-from)), rgb(var(--c-cta-to)));
+  }
+
+  .bg-cta-alt {
+    background-image: linear-gradient(to right, rgb(var(--c-cta-alt-from)), rgb(var(--c-cta-alt-to)));
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgb(var(--c-ink) / 0.12);
+    border-radius: 9999px;
+  }
+}
+
+@layer utilities {
+  /* Safe areas: Capacitor injects --safe-area-inset-*; browsers expose env() */
+  .pt-safe {
+    padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  }
+
+  .pb-safe {
+    padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
   }
 }

@@ -1,4 +1,23 @@
 /** @type {import('tailwindcss').Config} */
+
+// Colors come from the CSS variables of the active theme (src/index.css)
+const token = (name) => `rgb(var(--c-${name}) / <alpha-value>)`;
+
+const colors = {
+  canvas: token('canvas'),
+  ink: token('ink'),
+  shade: token('shade'),
+  raised: token('raised'),
+  nav: token('nav'),
+  primary: token('primary'),
+  secondary: token('secondary'),
+  accent: token('accent'),
+  warning: token('warning'),
+  error: token('error'),
+  'on-primary': token('on-primary'),
+  'on-secondary': token('on-secondary'),
+};
+
 export default {
   content: [
     "./index.html",
@@ -6,18 +25,22 @@ export default {
   ],
   theme: {
     extend: {
-      colors: {
-        background: '#111318',
-        primary: '#00Dbe9',
-        secondary: '#36FFc4',
-        error: '#FFB4ab',
-        surface: 'rgba(255, 255, 255, 0.03)',
-        'surface-border': 'rgba(255, 255, 255, 0.1)',
+      colors,
+      textColor: {
+        // Faint text (text-ink/40) gets a per-theme minimum opacity so it stays
+        // readable on light backgrounds, where low alphas wash out much faster.
+        ink: 'rgb(var(--c-ink) / calc(var(--text-floor) + (1 - var(--text-floor)) * <alpha-value>))',
       },
       fontFamily: {
-        headline: ['"Hanken Grotesk"', 'sans-serif'],
-        body: ['Inter', 'sans-serif'],
-        label: ['"Space Grotesk"', 'monospace'],
+        headline: ['var(--font-headline)'],
+        body: ['var(--font-body)'],
+        label: ['var(--font-label)'],
+        mono: ['var(--font-mono)'],
+      },
+      borderRadius: {
+        lg: 'var(--radius-lg)',
+        xl: 'var(--radius-xl)',
+        '2xl': 'var(--radius-2xl)',
       },
       backdropBlur: {
         xl: '40px',
