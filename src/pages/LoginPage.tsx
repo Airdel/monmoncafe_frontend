@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { Coffee, Lock, Mail, Loader2 } from 'lucide-react';
+import { AxiosError } from 'axios';
+import { Coffee, Lock, Mail, Loader2, Server } from 'lucide-react';
 import { api } from '../lib/api';
 import { getErrorMessage } from '../lib/errors';
+import { getApiUrl, hasCustomApiUrl, isNativeApp, normalizeApiUrl, setApiUrl } from '../lib/server';
 import { useAuthStore } from '../store/auth';
 import * as motion from 'motion/react-client';
 
@@ -10,20 +12,36 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [serverUrl, setServerUrl] = useState(getApiUrl);
+  const [showServer, setShowServer] = useState(isNativeApp && !hasCustomApiUrl());
   const setAuth = useAuthStore((state) => state.setAuth);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    
+
+    if (showServer) {
+      try {
+        setApiUrl(serverUrl);
+        setServerUrl(getApiUrl());
+      } catch {
+        setError('La dirección del servidor no es válida');
+        setLoading(false);
+        return;
+      }
+    }
+
     try {
       const res = await api.post('/auth/login', { email, password });
       // NestJS TransformInterceptor wraps the response in a 'data' object
       const { user, accessToken, refreshToken } = res.data.data ? res.data.data : res.data;
       setAuth(user, accessToken, refreshToken);
     } catch (err) {
-      setError(getErrorMessage(err, 'Credenciales inválidas'));
+      const noResponse = err instanceof AxiosError && !err.response;
+      setError(noResponse
+        ? `No se pudo conectar con el servidor (${getApiUrl()})`
+        : getErrorMessage(err, 'Credenciales inválidas'));
     } finally {
       setLoading(false);
     }
@@ -85,6 +103,37 @@ export function LoginPage() {
                 />
               </div>
             </div>
+
+            {showServer ? (
+              <div>
+                <label className="block text-white/60 text-xs font-label uppercase tracking-wider mb-2">Servidor</label>
+                <div className="relative">
+                  <Server className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                  <input
+                    type="text"
+                    inputMode="url"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    value={serverUrl}
+                    onChange={e => setServerUrl(e.target.value)}
+                    className="w-full bg-[#0a0b0e]/50 border border-white/10 rounded-xl py-3 pl-11 pr-4 text-white placeholder-white/20 focus:outline-none focus:border-primary/50 focus:bg-white/5 transition-all"
+                    placeholder="192.168.1.50"
+                  />
+                </div>
+                <p className="text-white/30 text-xs mt-2">
+                  IP de la computadora donde corre el backend. Se completa como {normalizeApiUrlSafe(serverUrl) || 'http://IP:3001/api'}
+                </p>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowServer(true)}
+                className="flex items-center gap-2 text-white/30 hover:text-white/60 text-xs transition-colors"
+              >
+                <Server className="w-3.5 h-3.5" />
+                Servidor: {serverUrl}
+              </button>
+            )}
           </div>
 
           <button 
@@ -97,4 +146,12 @@ export function LoginPage() {
       </motion.div>
     </div>
   );
+}
+
+function normalizeApiUrlSafe(input: string): string {
+  try {
+    return normalizeApiUrl(input);
+  } catch {
+    return '';
+  }
 }

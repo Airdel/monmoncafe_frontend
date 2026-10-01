@@ -1,14 +1,12 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/auth';
+import { getApiUrl } from './server';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-
-export const api = axios.create({
-  baseURL: API_URL,
-});
+export const api = axios.create();
 
 api.interceptors.request.use(
   (config) => {
+    config.baseURL = getApiUrl();
     const token = useAuthStore.getState().accessToken;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -29,7 +27,7 @@ api.interceptors.response.use(
         if (!auth.refreshToken) throw new Error('No refresh token');
         
         // Use native fetch to avoid interceptor loop
-        const res = await fetch(`${API_URL}/auth/refresh`, {
+        const res = await fetch(`${getApiUrl()}/auth/refresh`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
