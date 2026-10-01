@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MonMon Café</string>
+    <string name="title_activity_main">MonMon Café</string>
+    <string name="package_name">com.monmoncafe.app</string>
+    <string name="custom_url_scheme">com.monmoncafe.app</string>
+</resources>
