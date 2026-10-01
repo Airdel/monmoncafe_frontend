@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, Plus, Send, X, Save, Trash2, ArrowUpDown, type LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { getErrorMessage } from '../lib/errors';
+import { useAuthStore } from '../store/auth';
 import * as motion from 'motion/react-client';
 
 interface Ingredient {
@@ -42,6 +43,9 @@ type Tab = 'stock' | 'recipes' | 'purchases';
 type StockFilter = 'all' | 'low';
 
 export function InventoryPage() {
+  // Stock adjustments, recipe edits and purchases are SUPERVISOR/ADMIN only on the backend
+  const role = useAuthStore(state => state.user?.role);
+  const canManage = role === 'ADMIN' || role === 'SUPERVISOR';
   const [activeTab, setActiveTab] = useState<Tab>('stock');
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -185,7 +189,7 @@ export function InventoryPage() {
   const tabs: { key: Tab; label: string; icon: LucideIcon }[] = [
     { key: 'stock', label: 'Stock', icon: Package },
     { key: 'recipes', label: 'Recetas', icon: SlidersHorizontal },
-    { key: 'purchases', label: 'Compras', icon: ShoppingCart },
+    ...(canManage ? [{ key: 'purchases' as const, label: 'Compras', icon: ShoppingCart }] : []),
   ];
 
   return (
@@ -255,20 +259,20 @@ export function InventoryPage() {
                   <th className="py-4 px-6 font-medium">Mínimo</th>
                   <th className="py-4 px-6 font-medium">Costo Unit.</th>
                   <th className="py-4 px-6 font-medium text-center">Estado</th>
-                  <th className="py-4 px-6 font-medium text-center">Ajustar</th>
+                  {canManage && <th className="py-4 px-6 font-medium text-center">Ajustar</th>}
                 </tr>
               </thead>
               <tbody className="font-body text-sm">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-white/40">
+                    <td colSpan={canManage ? 7 : 6} className="py-8 text-center text-white/40">
                       <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
                       Cargando inventario...
                     </td>
                   </tr>
                 ) : filteredIngredients.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-white/40">
+                    <td colSpan={canManage ? 7 : 6} className="py-8 text-center text-white/40">
                       {stockFilter === 'low' ? 'No hay ingredientes con stock bajo ✅' : 'No hay ingredientes registrados'}
                     </td>
                   </tr>
@@ -305,14 +309,14 @@ export function InventoryPage() {
                           <CheckCircle2 className="w-5 h-5 text-secondary" />
                         )}
                       </td>
-                      <td className="py-4 px-6 text-center">
+                      {canManage && <td className="py-4 px-6 text-center">
                         <button
                           onClick={() => { setAdjustModal(item); setAdjustType('ADJUSTMENT'); setAdjustQty(''); setAdjustReason(''); }}
                           className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/60 hover:text-primary hover:border-primary/30 transition-all text-xs font-label uppercase tracking-wider flex items-center gap-1 mx-auto"
                         >
                           <ArrowUpDown className="w-3 h-3" /> Ajustar
                         </button>
-                      </td>
+                      </td>}
                     </motion.tr>
                   );
                 })}
@@ -451,7 +455,7 @@ export function InventoryPage() {
                         {recipeSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4" /> Guardar</>}
                       </button>
                     </div>
-                  ) : (
+                  ) : canManage && (
                     <button onClick={startEditRecipe} className="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:text-primary hover:border-primary/30 text-sm font-medium flex items-center justify-center gap-2 transition-all">
                       <SlidersHorizontal className="w-4 h-4" /> Editar Receta
                     </button>
@@ -464,7 +468,7 @@ export function InventoryPage() {
       )}
 
       {/* ═══ TAB: PURCHASES ═══ */}
-      {activeTab === 'purchases' && (
+      {activeTab === 'purchases' && canManage && (
         <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0">
           {/* Purchase Form */}
           <motion.div
