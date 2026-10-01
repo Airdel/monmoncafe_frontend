@@ -4,6 +4,7 @@ import { TopAppBar } from './components/layout/TopAppBar';
 import { InventoryPage } from './pages/InventoryPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { PosPage } from './pages/PosPage';
+import { FinancePage } from './pages/FinancePage';
 import { LoginPage } from './pages/LoginPage';
 import { useAuthStore } from './store/auth';
 
@@ -27,6 +28,7 @@ function App() {
             <Route path="/" element={<DashboardPage />} />
             <Route path="/inventory" element={<InventoryPage />} />
             <Route path="/pos" element={<PosPage />} />
+            <Route path="/finance" element={<FinancePage />} />
           </Routes>
         </div>
       </main>

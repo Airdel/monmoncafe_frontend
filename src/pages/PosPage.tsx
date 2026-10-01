@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Minus, Plus, Banknote, CreditCard, Zap, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
+import { getErrorMessage } from '../lib/errors';
 import * as motion from 'motion/react-client';
 
 interface Category {
@@ -73,9 +74,9 @@ export function PosPage() {
       });
       alert('Sale completed successfully!');
       setCart([]);
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      alert('Error processing sale: ' + (err.response?.data?.message || err.message));
+      alert('Error processing sale: ' + getErrorMessage(err));
     } finally {
       setIsProcessing(false);
     }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Coffee, Lock, Mail, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
+import { getErrorMessage } from '../lib/errors';
 import { useAuthStore } from '../store/auth';
 import * as motion from 'motion/react-client';
 
@@ -21,8 +22,8 @@ export function LoginPage() {
       // NestJS TransformInterceptor wraps the response in a 'data' object
       const { user, accessToken, refreshToken } = res.data.data ? res.data.data : res.data;
       setAuth(user, accessToken, refreshToken);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Invalid credentials');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Invalid credentials'));
     } finally {
       setLoading(false);
     }

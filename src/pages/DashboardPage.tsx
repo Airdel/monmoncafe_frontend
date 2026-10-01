@@ -24,6 +24,15 @@ interface DashboardData {
   }[];
 }
 
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Justo ahora';
+  if (mins < 60) return `Hace ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  return `Hace ${hours}h`;
+}
+
 export function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,14 +60,6 @@ export function DashboardPage() {
   // Calculate reinvestment progress bar (% of revenue)
   const reinvestPct = metrics.revenue > 0 ? Math.min((metrics.reinvestment / metrics.revenue) * 100, 100) : 0;
 
-  function timeAgo(dateStr: string) {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'Justo ahora';
-    if (mins < 60) return `Hace ${mins} min`;
-    const hours = Math.floor(mins / 60);
-    return `Hace ${hours}h`;
-  }
 
   return (
     <div className="h-full flex flex-col gap-6 animate-in fade-in duration-500 max-w-5xl mx-auto pb-8">
