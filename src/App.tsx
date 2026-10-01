@@ -1,6 +1,5 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { SideNavBar } from './components/layout/SideNavBar';
-import { TopAppBar } from './components/layout/TopAppBar';
 import { InventoryPage } from './pages/InventoryPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { PosPage } from './pages/PosPage';
@@ -20,15 +19,13 @@ function App() {
       <SideNavBar />
       
       <main className="w-full h-screen relative flex flex-col">
-        <TopAppBar />
-        
-        {/* Main Content Area */}
-        <div className="pt-24 px-8 pb-8 flex-1 overflow-y-auto">
+        <div className="pt-8 px-8 pb-8 flex-1 overflow-y-auto">
           <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/inventory" element={<InventoryPage />} />
             <Route path="/pos" element={<PosPage />} />
             <Route path="/finance" element={<FinancePage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
       </main>

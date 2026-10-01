@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { TrendingUp, Wallet, PieChart, Briefcase, AlertTriangle, Sparkles, Coffee, Package, Loader2 } from 'lucide-react';
 import * as motion from 'motion/react-client';
 import { api } from '../lib/api';
+import { formatMoney } from '../lib/format';
 
 interface DashboardData {
   today: {
@@ -76,36 +77,15 @@ export function DashboardPage() {
         {/* Ventas del Día (Large widget) */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-          className="glass-panel p-6 col-span-12 md:col-span-8 flex flex-col justify-between relative overflow-hidden group"
+          className="glass-panel p-6 col-span-12 md:col-span-8 flex flex-col justify-between"
         >
           <div className="flex justify-between items-start z-10 relative">
             <div>
               <p className="text-white/50 text-sm font-label uppercase tracking-widest mb-2">Ventas del día</p>
-              <h2 className="font-headline text-6xl font-bold text-primary glow-cyan drop-shadow-md">${metrics.revenue.toFixed(2)}</h2>
+              <h2 className="font-headline text-6xl font-bold text-primary drop-shadow-md">{formatMoney(metrics.revenue)}</h2>
               <p className="text-white/40 text-xs font-label mt-2">{metrics.totalTransactions} transacciones</p>
             </div>
             <TrendingUp className="w-6 h-6 text-secondary" />
-          </div>
-          
-          {/* Sparkline SVG */}
-          <div className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none opacity-80 group-hover:opacity-100 transition-opacity">
-            <svg viewBox="0 0 400 100" preserveAspectRatio="none" className="w-full h-full">
-              <defs>
-                <linearGradient id="glowGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#00Dbe9" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="#00Dbe9" stopOpacity="0" />
-                </linearGradient>
-                <filter id="neonGlow">
-                  <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-                  <feMerge>
-                    <feMergeNode in="coloredBlur"/>
-                    <feMergeNode in="SourceGraphic"/>
-                  </feMerge>
-                </filter>
-              </defs>
-              <path d="M0 80 Q 40 80, 80 60 T 160 70 T 240 20 T 320 80 L 400 30" fill="none" stroke="#00Dbe9" strokeWidth="4" filter="url(#neonGlow)" />
-              <path d="M0 80 Q 40 80, 80 60 T 160 70 T 240 20 T 320 80 L 400 30 L 400 100 L 0 100 Z" fill="url(#glowGradient)" />
-            </svg>
           </div>
         </motion.div>
 
@@ -116,16 +96,16 @@ export function DashboardPage() {
           >
              <div className="flex items-center gap-3 mb-2">
                <Wallet className="w-5 h-5 text-secondary" />
-               <p className="text-white/50 text-sm font-label uppercase tracking-widest">Utilidad real</p>
+               <p className="text-white/50 text-sm font-label uppercase tracking-widest">Utilidad bruta</p>
              </div>
-             <h3 className="font-headline text-4xl font-bold text-secondary glow-mint">${metrics.grossProfit.toFixed(2)}</h3>
+             <h3 className="font-headline text-4xl font-bold text-secondary">{formatMoney(metrics.grossProfit)}</h3>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
             className="glass-panel p-6 flex-1 flex flex-col justify-center"
           >
              <div className="flex items-center gap-3 mb-2">
                <PieChart className="w-5 h-5 text-[#C9A0DC]" />
-               <p className="text-white/50 text-sm font-label uppercase tracking-widest">Margen neto</p>
+               <p className="text-white/50 text-sm font-label uppercase tracking-widest">Margen bruto</p>
              </div>
              <h3 className="font-headline text-4xl font-bold text-[#C9A0DC] drop-shadow-[0_0_15px_rgba(201,160,220,0.3)]">{metrics.marginPct}%</h3>
           </motion.div>
@@ -139,7 +119,7 @@ export function DashboardPage() {
             <p className="text-white/50 text-sm font-label uppercase tracking-widest">Dinero para reposición de materia prima</p>
             <Briefcase className="w-5 h-5 text-white/40" />
           </div>
-          <h3 className="font-headline text-3xl font-bold text-white mb-4">${metrics.reinvestment.toFixed(2)}</h3>
+          <h3 className="font-headline text-3xl font-bold text-white mb-4">{formatMoney(metrics.reinvestment)}</h3>
           <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
             <div className="h-full bg-primary glow-cyan rounded-full transition-all duration-1000" style={{ width: `${reinvestPct}%` }}></div>
           </div>
@@ -161,7 +141,7 @@ export function DashboardPage() {
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="text-white/40 text-xs font-mono">{product.qty}x</span>
-                    <span className="font-mono text-secondary font-medium">${product.revenue.toFixed(2)}</span>
+                    <span className="font-mono text-secondary font-medium">{formatMoney(product.revenue)}</span>
                   </div>
                 </div>
               ))}
@@ -194,7 +174,7 @@ export function DashboardPage() {
             </div>
           ) : (
             <div className="glass-panel p-6 border-l-4 border-l-primary flex items-center gap-4">
-              <Sparkles className="w-6 h-6 text-primary glow-cyan" />
+              <Sparkles className="w-6 h-6 text-primary" />
               <div>
                 <h4 className="font-headline font-bold text-primary">Todo en orden</h4>
                 <p className="text-white/60 text-sm italic">No hay alertas de inventario</p>
@@ -226,7 +206,7 @@ export function DashboardPage() {
                       <p className="text-white/40 text-xs">{timeAgo(sale.createdAt)} · {sale.cashier} · {sale.paymentMethod === 'CASH' ? 'Efectivo' : 'Transferencia'}</p>
                     </div>
                   </div>
-                  <span className="font-mono text-secondary font-medium shrink-0">+${sale.total.toFixed(2)}</span>
+                  <span className="font-mono text-secondary font-medium shrink-0">+{formatMoney(sale.total)}</span>
                 </motion.div>
               ))
             ) : (
