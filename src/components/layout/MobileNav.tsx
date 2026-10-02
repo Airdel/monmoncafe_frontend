@@ -30,7 +30,7 @@ export function MobileTopBar({ onOpenThemes }: { onOpenThemes: () => void }) {
 export function BottomNav() {
   return (
     <nav className="md:hidden shrink-0 pb-safe border-t border-ink/10 bg-nav/90 backdrop-blur-3xl z-40">
-      <div className="grid grid-cols-4 h-16">
+      <div className="grid grid-cols-5 h-16">
         {navItems.map(item => {
           const Icon = item.icon;
           return (
@@ -45,7 +45,7 @@ export function BottomNav() {
             >
               {({ isActive }) => (
                 <>
-                  <span className={cn("px-4 py-1 rounded-full transition-colors", isActive && "bg-primary/15")}>
+                  <span className={cn("px-3 py-1 rounded-full transition-colors", isActive && "bg-primary/15")}>
                     <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
                   </span>
                   {item.shortLabel}
