@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BellRing, Check, ChefHat, Loader2, MessageSquareText, RotateCcw, User } from 'lucide-react';
+import { ArrowLeftRight, Banknote, BellRing, Check, ChefHat, Loader2, MessageSquareText, RotateCcw, User } from 'lucide-react';
 import * as motion from 'motion/react-client';
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { unwrap } from '../lib/unwrap';
 import { getErrorMessage } from '../lib/errors';
+import { formatMoney } from '../lib/format';
+import { Modal } from '../components/ui/Modal';
 
 type OrderStatus = 'PENDING' | 'READY' | 'DELIVERED';
 
@@ -12,6 +14,8 @@ interface Order {
   id: number;
   createdAt: string;
   orderStatus: OrderStatus;
+  isPaid: boolean;
+  totalAmount: string;
   customerName: string | null;
   notes: string | null;
   user: { name: string };
@@ -23,7 +27,7 @@ interface Order {
   }[];
 }
 
-type Filter = 'all' | OrderStatus;
+type Filter = 'all' | OrderStatus | 'UNPAID';
 
 const REFRESH_MS = 8000;
 
@@ -57,6 +61,11 @@ export function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('all');
   const [busyId, setBusyId] = useState<number | null>(null);
+  // Pay-later order being charged; deliver=true hands it out right after
+  const [charging, setCharging] = useState<{ order: Order; deliver: boolean } | null>(null);
+  const [payMethod, setPayMethod] = useState<'CASH' | 'TRANSFER'>('CASH');
+  const [cashReceived, setCashReceived] = useState('');
+  const [paying, setPaying] = useState(false);
   const seen = useRef<Set<number> | null>(null);
 
   const load = useCallback(async () => {
@@ -92,14 +101,46 @@ export function OrdersPage() {
     }
   };
 
-  const pendingCount = orders.filter(o => o.orderStatus === 'PENDING').length;
+  const openCharge = (order: Order, deliver: boolean) => {
+    setPayMethod('CASH');
+    setCashReceived('');
+    setCharging({ order, deliver });
+  };
+
+  const charge = async () => {
+    if (!charging) return;
+    const { order, deliver } = charging;
+    setPaying(true);
+    try {
+      await api.post(`/sales/${order.id}/pay`, {
+        paymentMethod: payMethod,
+        ...(payMethod === 'CASH' && cashReceived && { cashReceived: Number(cashReceived) }),
+      });
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, isPaid: true } : o));
+      setCharging(null);
+      if (deliver) await setStatus({ ...order, isPaid: true }, 'DELIVERED');
+    } catch (err) {
+      alert('Error: ' + getErrorMessage(err));
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const chargeTotal = charging ? Number(charging.order.totalAmount) : 0;
+  const change = cashReceived ? Number(cashReceived) - chargeTotal : 0;
+
+  const unpaidCount = orders.filter(o => !o.isPaid).length;
+  const pendingCount =orders.filter(o => o.orderStatus === 'PENDING').length;
   const readyCount = orders.filter(o => o.orderStatus === 'READY').length;
-  const visible = filter === 'all' ? orders : orders.filter(o => o.orderStatus === filter);
+  const visible = filter === 'all' ? orders
+    : filter === 'UNPAID' ? orders.filter(o => !o.isPaid)
+    : orders.filter(o => o.orderStatus === filter);
 
   const chips: [Filter, string][] = [
     ['all', `Todas (${orders.length})`],
     ['PENDING', `Preparando (${pendingCount})`],
     ['READY', `Listas (${readyCount})`],
+    ...(unpaidCount > 0 ? [['UNPAID', `Por cobrar (${unpaidCount})`] as [Filter, string]] : []),
   ];
 
   return (
@@ -190,9 +231,25 @@ export function OrdersPage() {
                   </p>
                 )}
 
-                <p className="text-ink/30 text-xs mt-4">Cobró {order.user.name}</p>
+                {order.isPaid ? (
+                  <p className="text-ink/30 text-xs mt-4">Cobró {order.user.name}</p>
+                ) : (
+                  <div className="mt-4 flex items-center justify-between gap-2 p-3 rounded-xl bg-error/10 border border-error/25">
+                    <span className="text-error text-xs font-label uppercase tracking-widest font-bold">Por cobrar</span>
+                    <span className="font-mono font-bold text-ink">{formatMoney(order.totalAmount)}</span>
+                  </div>
+                )}
 
                 <div className="flex gap-2 mt-3">
+                  {!order.isPaid && !ready && (
+                    <button
+                      onClick={() => openCharge(order, false)}
+                      disabled={busy}
+                      className="px-4 py-3 rounded-xl bg-ink/5 border border-ink/15 text-ink/80 font-bold flex items-center gap-2 hover:text-ink disabled:opacity-50"
+                    >
+                      <Banknote className="w-4 h-4" /> Cobrar
+                    </button>
+                  )}
                   {ready ? (
                     <>
                       <button
@@ -204,11 +261,13 @@ export function OrdersPage() {
                         <RotateCcw className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => setStatus(order, 'DELIVERED')}
+                        onClick={() => order.isPaid ? setStatus(order, 'DELIVERED') : openCharge(order, true)}
                         disabled={busy}
                         className="flex-1 py-3 rounded-xl bg-cta-alt text-on-secondary font-bold flex items-center justify-center gap-2 disabled:opacity-50"
                       >
-                        {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Check className="w-5 h-5" /> Entregada</>}
+                        {busy ? <Loader2 className="w-5 h-5 animate-spin" />
+                          : order.isPaid ? <><Check className="w-5 h-5" /> Entregada</>
+                          : <><Banknote className="w-5 h-5" /> Cobrar y entregar</>}
                       </button>
                     </>
                   ) : (
@@ -225,6 +284,59 @@ export function OrdersPage() {
             );
           })}
         </div>
+      )}
+
+      {charging && (
+        <Modal title={`Cobrar comanda #${charging.order.id}`} onClose={() => setCharging(null)}>
+          <div className="space-y-4">
+            <div className="flex items-end justify-between">
+              <span className="text-ink/50 text-sm">{charging.order.customerName ?? 'Total'}</span>
+              <span className="font-headline text-3xl font-bold text-secondary">{formatMoney(chargeTotal)}</span>
+            </div>
+            <div className="flex gap-3">
+              {([['CASH', 'Efectivo', Banknote], ['TRANSFER', 'Transferencia', ArrowLeftRight]] as const).map(([method, label, Icon]) => (
+                <button
+                  key={method}
+                  onClick={() => setPayMethod(method)}
+                  aria-pressed={payMethod === method}
+                  className={cn(
+                    'flex-1 py-3 border rounded-xl flex flex-col items-center gap-1 transition-colors',
+                    payMethod === method ? 'bg-primary/15 border-primary text-primary' : 'bg-ink/5 border-ink/10 text-ink/60 hover:text-ink'
+                  )}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span className="font-label text-[11px] uppercase tracking-widest font-semibold">{label}</span>
+                </button>
+              ))}
+            </div>
+            {payMethod === 'CASH' && (
+              <div>
+                <label className="text-ink/50 text-xs font-label uppercase tracking-widest block mb-2" htmlFor="cash-received">Recibido (opcional)</label>
+                <input
+                  id="cash-received"
+                  type="number"
+                  inputMode="decimal"
+                  value={cashReceived}
+                  onChange={e => setCashReceived(e.target.value)}
+                  placeholder={chargeTotal.toFixed(2)}
+                  className="w-full px-4 py-3 bg-ink/5 border border-ink/10 rounded-xl text-ink font-mono focus:border-primary/50 focus:outline-none placeholder:text-ink/20"
+                />
+                {cashReceived && (
+                  <p className={cn('text-sm mt-2 font-medium', change < 0 ? 'text-error' : 'text-secondary')}>
+                    {change < 0 ? `Faltan ${formatMoney(-change)}` : `Cambio: ${formatMoney(change)}`}
+                  </p>
+                )}
+              </div>
+            )}
+            <button
+              onClick={charge}
+              disabled={paying || (payMethod === 'CASH' && !!cashReceived && change < 0)}
+              className="w-full py-4 rounded-xl bg-cta text-on-primary font-bold text-lg flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {paying ? <Loader2 className="w-5 h-5 animate-spin" /> : charging.deliver ? 'Cobrar y entregar' : 'Cobrar'}
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Loader2, Lock, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, Lock, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { getErrorMessage } from '../../lib/errors';
 import { formatDay, formatMoney, todayISO } from '../../lib/format';
@@ -90,6 +90,16 @@ export function ClosingTab({ onClosed }: { onClosed: () => void }) {
       ) : preview && (
         <div className={loading ? 'opacity-50 pointer-events-none transition-opacity' : 'transition-opacity'}>
           <ClosingBreakdown totals={preview} details={preview.details} />
+
+          {!preview.alreadyClosed && !!preview.unpaidOrders?.count && (
+            <p className="mt-6 p-4 rounded-xl bg-warning/10 border border-warning/30 text-ink text-sm flex items-start gap-2">
+              <AlertTriangle className="w-5 h-5 text-warning shrink-0" />
+              <span>
+                Hay {preview.unpaidOrders.count} {preview.unpaidOrders.count === 1 ? 'pedido' : 'pedidos'} por cobrar ({formatMoney(preview.unpaidOrders.total)}) en Comandas.
+                No entran en este corte; cóbralos antes de cerrar el día o contarán en el día en que se cobren.
+              </span>
+            </p>
+          )}
 
           {!preview.alreadyClosed && (
             <div className="glass-panel p-5 mt-6 flex flex-col md:flex-row gap-4 md:items-end">
