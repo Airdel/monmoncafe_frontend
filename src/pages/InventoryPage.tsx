@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, Plus, Send, X, Save, Trash2, ArrowUpDown, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, Plus, Send, X, Save, Trash2, ArrowUpDown, Layers, type LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { getErrorMessage } from '../lib/errors';
 import { useAuthStore } from '../store/auth';
 import { Modal } from '../components/ui/Modal';
+import { ModifiersTab } from '../components/inventory/ModifiersTab';
 import * as motion from 'motion/react-client';
 
 interface Ingredient {
@@ -40,7 +41,7 @@ interface Supplier {
   name: string;
 }
 
-type Tab = 'stock' | 'recipes' | 'purchases';
+type Tab = 'stock' | 'recipes' | 'modifiers' | 'purchases';
 type StockFilter = 'all' | 'low';
 
 export function InventoryPage() {
@@ -190,6 +191,7 @@ export function InventoryPage() {
   const tabs: { key: Tab; label: string; icon: LucideIcon }[] = [
     { key: 'stock', label: 'Stock', icon: Package },
     { key: 'recipes', label: 'Recetas', icon: SlidersHorizontal },
+    { key: 'modifiers', label: 'Opciones', icon: Layers },
     ...(canManage ? [{ key: 'purchases' as const, label: 'Compras', icon: ShoppingCart }] : []),
   ];
 
@@ -210,13 +212,13 @@ export function InventoryPage() {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex-1 sm:flex-none justify-center px-3 sm:px-5 py-2.5 sm:py-2 rounded-lg font-label text-sm uppercase tracking-wider sm:tracking-widest flex items-center gap-2 transition-all duration-300 ${
+                className={`flex-1 sm:flex-none justify-center px-1.5 sm:px-5 py-2.5 sm:py-2 rounded-lg font-label text-xs sm:text-sm uppercase sm:tracking-widest flex items-center gap-2 transition-all duration-300 ${
                   activeTab === tab.key
                     ? 'bg-primary/20 text-primary font-bold glow-primary-soft'
                     : 'text-ink/50 hover:text-ink'
                 }`}
               >
-                <Icon className="w-4 h-4" />
+                <Icon className="hidden sm:block w-4 h-4" />
                 {tab.label}
               </button>
             );
@@ -520,6 +522,11 @@ export function InventoryPage() {
             </motion.div>
           )}
         </div>
+      )}
+
+      {/* ═══ TAB: MODIFIERS ═══ */}
+      {activeTab === 'modifiers' && (
+        <ModifiersTab ingredients={ingredients} products={products} canManage={canManage} />
       )}
 
       {/* ═══ TAB: PURCHASES ═══ */}
