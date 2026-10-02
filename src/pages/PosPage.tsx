@@ -4,6 +4,9 @@ import { cn } from '../lib/cn';
 import { api } from '../lib/api';
 import { formatMoney } from '../lib/format';
 import { getErrorMessage } from '../lib/errors';
+import { unwrap } from '../lib/unwrap';
+import { formatDelta, type ModifierGroup, type ModifierOption } from '../lib/modifiers';
+import { Modal } from '../components/ui/Modal';
 import * as motion from 'motion/react-client';
 
 interface Category {
@@ -18,16 +21,34 @@ interface Product {
   name: string;
   sellingPrice: string;
   categoryId: number;
+  modifierGroups?: { groupId: number }[];
 }
+
+interface CartLine {
+  /** Product id plus chosen options, so a latte with oat milk is its own line. */
+  key: string;
+  product: Product;
+  options: ModifierOption[];
+  quantity: number;
+}
+
+const lineKey = (productId: number, options: ModifierOption[]) =>
+  [productId, ...options.map(o => o.id).sort((a, b) => a - b)].join('-');
+
+const unitPrice = (line: Pick<CartLine, 'product' | 'options'>) =>
+  Number(line.product.sellingPrice) + line.options.reduce((sum, o) => sum + Number(o.priceDelta), 0);
 
 export function PosPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [activeCategory, setActiveCategory] = useState<number | 'all'>('all');
   const [loading, setLoading] = useState(true);
+  const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
 
   // Cart state
-  const [cart, setCart] = useState<{ product: Product; quantity: number }[]>([]);
+  const [cart, setCart] = useState<CartLine[]>([]);
+  // Product waiting for the cashier to choose its options
+  const [picking, setPicking] = useState<{ product: Product; groups: ModifierGroup[]; selected: number[] } | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'TRANSFER'>('CASH');
   const [isProcessing, setIsProcessing] = useState(false);
   // Phones show the order as a bottom sheet
@@ -36,8 +57,10 @@ export function PosPage() {
   useEffect(() => {
     Promise.all([
       api.get('/products/categories'),
-      api.get('/products')
-    ]).then(([catRes, prodRes]) => {
+      api.get('/products'),
+      api.get('/modifiers'),
+    ]).then(([catRes, prodRes, modRes]) => {
+      setModifierGroups(unwrap<ModifierGroup[]>(modRes));
       const catList: Category[] = catRes.data.data || catRes.data;
       // Deduplicate categories in case seed was run multiple times
       const uniqueCats = Array.from(new Map(catList.map(item => [item.name, item])).values());
@@ -48,32 +71,70 @@ export function PosPage() {
     }).finally(() => setLoading(false));
   }, []);
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, options: ModifierOption[] = []) => {
+    const key = lineKey(product.id, options);
     setCart(prev => {
-      const existing = prev.find(item => item.product.id === product.id);
+      const existing = prev.find(item => item.key === key);
       if (existing) {
-        return prev.map(item => item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
+        return prev.map(item => item.key === key ? { ...item, quantity: item.quantity + 1 } : item);
       }
-      return [...prev, { product, quantity: 1 }];
+      return [...prev, { key, product, options, quantity: 1 }];
     });
   };
 
-  const removeFromCart = (productId: number) => {
+  const removeFromCart = (key: string) => {
     setCart(prev => {
-      const existing = prev.find(item => item.product.id === productId);
+      const existing = prev.find(item => item.key === key);
       if (existing && existing.quantity > 1) {
-        return prev.map(item => item.product.id === productId ? { ...item, quantity: item.quantity - 1 } : item);
+        return prev.map(item => item.key === key ? { ...item, quantity: item.quantity - 1 } : item);
       }
-      return prev.filter(item => item.product.id !== productId);
+      return prev.filter(item => item.key !== key);
     });
   };
+
+  // Products with options open the picker; the rest go straight to the order
+  const selectProduct = (product: Product) => {
+    const linked = new Set(product.modifierGroups?.map(g => g.groupId));
+    const groups = modifierGroups.filter(g => linked.has(g.id) && g.options.length > 0);
+    if (groups.length === 0) return addToCart(product);
+    // Required single-choice groups start on their first option
+    const selected = groups.filter(g => g.isRequired && !g.allowMultiple).map(g => g.options[0].id);
+    setPicking({ product, groups, selected });
+  };
+
+  const toggleOption = (group: ModifierGroup, optionId: number) => {
+    setPicking(prev => {
+      if (!prev) return prev;
+      const isOn = prev.selected.includes(optionId);
+      const groupIds = new Set(group.options.map(o => o.id));
+      let selected: number[];
+      if (group.allowMultiple) {
+        selected = isOn ? prev.selected.filter(id => id !== optionId) : [...prev.selected, optionId];
+      } else if (isOn) {
+        // Required groups keep their choice; optional ones can be cleared
+        selected = group.isRequired ? prev.selected : prev.selected.filter(id => id !== optionId);
+      } else {
+        selected = [...prev.selected.filter(id => !groupIds.has(id)), optionId];
+      }
+      return { ...prev, selected };
+    });
+  };
+
+  const pickedOptions = picking
+    ? picking.groups.flatMap(g => g.options.filter(o => picking.selected.includes(o.id)))
+    : [];
+  const missingGroup = picking?.groups.find(g => g.isRequired && !g.options.some(o => picking.selected.includes(o.id)));
 
   const handleCheckout = async () => {
     if (cart.length === 0) return;
     setIsProcessing(true);
     try {
       await api.post('/sales', {
-        items: cart.map(item => ({ productId: item.product.id, quantity: item.quantity })),
+        items: cart.map(item => ({
+          productId: item.product.id,
+          quantity: item.quantity,
+          ...(item.options.length > 0 && { modifierOptionIds: item.options.map(o => o.id) }),
+        })),
         paymentMethod
       });
       alert('¡Venta registrada!');
@@ -87,8 +148,8 @@ export function PosPage() {
     }
   };
 
-  // Matches what the backend charges: sum of selling prices, no tax or tip
-  const total = cart.reduce((acc, item) => acc + (Number(item.product.sellingPrice) * item.quantity), 0);
+  // Matches what the backend charges: price plus options, no tax or tip
+  const total = cart.reduce((acc, item) => acc + unitPrice(item) * item.quantity, 0);
   const itemCount = cart.reduce((acc, item) => acc + item.quantity, 0);
 
   // Filter products
@@ -135,7 +196,7 @@ export function PosPage() {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: Math.min(idx, 12) * 0.04 }}
               whileTap={{ scale: 0.96 }}
-              onClick={() => addToCart(product)}
+              onClick={() => selectProduct(product)}
               className="glass-panel group text-left border-ink/5 hover:border-primary/50 transition-colors flex flex-col overflow-hidden relative"
             >
               <div className="h-24 sm:h-32 lg:h-36 w-full shrink-0 overflow-hidden bg-primary/5">
@@ -185,18 +246,21 @@ export function PosPage() {
         <div className="flex-1 min-h-[6rem] overflow-y-auto space-y-4 pr-1 scrollbar-thin">
           {cart.length > 0 ? (
             cart.map((item) => (
-              <div key={item.product.id} className="flex items-center gap-3">
+              <div key={item.key} className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl bg-primary/10 overflow-hidden shrink-0 flex items-center justify-center">
                    <span className="font-headline font-bold text-primary/60">{item.product.name.substring(0, 2).toUpperCase()}</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-start gap-2">
                     <h4 className="font-bold text-ink text-sm line-clamp-1">{item.product.name}</h4>
-                    <span className="font-mono text-ink/80 shrink-0">{formatMoney(Number(item.product.sellingPrice) * item.quantity)}</span>
+                    <span className="font-mono text-ink/80 shrink-0">{formatMoney(unitPrice(item) * item.quantity)}</span>
                   </div>
+                  {item.options.length > 0 && (
+                    <p className="text-ink/50 text-xs line-clamp-2">{item.options.map(o => o.name).join(' · ')}</p>
+                  )}
                   <div className="flex items-center gap-3 mt-1">
                     <button
-                      onClick={() => removeFromCart(item.product.id)}
+                      onClick={() => removeFromCart(item.key)}
                       className="w-9 h-9 rounded-full bg-ink/5 border border-ink/10 flex items-center justify-center text-ink/60 hover:bg-ink/10 hover:text-ink active:scale-90 transition"
                       aria-label={`Quitar un ${item.product.name}`}
                     >
@@ -204,7 +268,7 @@ export function PosPage() {
                     </button>
                     <span className="font-mono text-base w-6 text-center">{item.quantity}</span>
                     <button
-                      onClick={() => addToCart(item.product)}
+                      onClick={() => addToCart(item.product, item.options)}
                       className="w-9 h-9 rounded-full bg-ink/5 border border-ink/10 flex items-center justify-center text-ink/60 hover:bg-ink/10 hover:text-ink active:scale-90 transition"
                       aria-label={`Agregar un ${item.product.name}`}
                     >
@@ -256,6 +320,50 @@ export function PosPage() {
           </button>
         </div>
       </div>
+
+      {/* Options picker */}
+      {picking && (
+        <Modal title={picking.product.name} onClose={() => setPicking(null)}>
+          <div className="space-y-5">
+            {picking.groups.map(group => (
+              <div key={group.id}>
+                <p className="text-ink/50 text-xs font-label uppercase tracking-widest mb-2">
+                  {group.name}
+                  <span className="ml-2 normal-case tracking-normal text-ink/30">
+                    {group.isRequired ? 'elige una' : group.allowMultiple ? 'opcional, varias' : 'opcional'}
+                  </span>
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {group.options.map(option => {
+                    const on = picking.selected.includes(option.id);
+                    return (
+                      <button
+                        key={option.id}
+                        onClick={() => toggleOption(group, option.id)}
+                        aria-pressed={on}
+                        className={cn(
+                          'px-3 py-3 rounded-xl border text-left transition-colors',
+                          on ? 'bg-primary/15 border-primary text-primary' : 'bg-ink/5 border-ink/10 text-ink/70 hover:bg-ink/10 hover:text-ink'
+                        )}
+                      >
+                        <span className="block font-medium text-sm">{option.name}</span>
+                        {formatDelta(option.priceDelta) && <span className="block font-mono text-xs opacity-70">{formatDelta(option.priceDelta)}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            <button
+              onClick={() => { addToCart(picking.product, pickedOptions); setPicking(null); }}
+              disabled={!!missingGroup}
+              className="w-full py-4 rounded-xl bg-cta text-on-primary font-bold text-lg flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {missingGroup ? `Elige ${missingGroup.name.toLowerCase()}` : <>Agregar · {formatMoney(unitPrice({ product: picking.product, options: pickedOptions }))}</>}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
