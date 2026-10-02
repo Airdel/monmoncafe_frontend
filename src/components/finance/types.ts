@@ -59,6 +59,8 @@ export interface ClosingPreview extends ClosingTotals {
   date: string;
   alreadyClosed: boolean;
   details: ClosingDetail[];
+  /** Orders sent to the bar but not charged yet; they count on the day they are paid. */
+  unpaidOrders?: { count: number; total: number };
 }
 
 export interface DailyClosing extends ClosingTotals {

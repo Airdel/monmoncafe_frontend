@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Minus, Plus, Banknote, ArrowLeftRight, Zap, Loader2, ShoppingBag, ChevronDown } from 'lucide-react';
+import { Minus, Plus, Banknote, ArrowLeftRight, Zap, Loader2, ShoppingBag, ChevronDown, Clock } from 'lucide-react';
 import { cn } from '../lib/cn';
 import { api } from '../lib/api';
 import { formatMoney } from '../lib/format';
@@ -128,7 +128,8 @@ export function PosPage() {
     : [];
   const missingGroup = picking?.groups.find(g => g.isRequired && !g.options.some(o => picking.selected.includes(o.id)));
 
-  const handleCheckout = async () => {
+  /** payLater sends the order to Comandas now and it is charged there later. */
+  const handleCheckout = async (payLater = false) => {
     if (cart.length === 0) return;
     setIsProcessing(true);
     try {
@@ -141,8 +142,11 @@ export function PosPage() {
         paymentMethod,
         customerName: customerName.trim() || undefined,
         notes: orderNote.trim() || undefined,
+        ...(payLater && { payLater: true }),
       }));
-      alert(`¡Venta registrada! Comanda #${sale.id}`);
+      alert(payLater
+        ? `Pedido enviado a comandas sin cobrar. Comanda #${sale.id}`
+        : `¡Venta registrada! Comanda #${sale.id}`);
       setCart([]);
       setCustomerName('');
       setOrderNote('');
@@ -337,14 +341,23 @@ export function PosPage() {
             ))}
           </div>
 
-          {/* Pay Button */}
-          <button
-            onClick={handleCheckout}
-            disabled={cart.length === 0 || isProcessing}
-            className="w-full py-4 rounded-xl bg-cta text-on-primary font-bold text-lg glow-secondary hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
-          >
-             {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Zap className="w-5 h-5 fill-current" /> Cobrar</>}
-          </button>
+          {/* Pay now, or send to Comandas and charge on pickup/delivery */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleCheckout(true)}
+              disabled={cart.length === 0 || isProcessing}
+              className="px-3 py-4 rounded-xl bg-ink/5 border border-ink/15 text-ink/80 font-bold text-sm leading-tight hover:bg-ink/10 hover:text-ink active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:pointer-events-none"
+            >
+              <Clock className="w-4 h-4 shrink-0" /> Cobrar después
+            </button>
+            <button
+              onClick={() => handleCheckout()}
+              disabled={cart.length === 0 || isProcessing}
+              className="flex-1 py-4 rounded-xl bg-cta text-on-primary font-bold text-lg glow-secondary hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
+            >
+               {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Zap className="w-5 h-5 fill-current" /> Cobrar</>}
+            </button>
+          </div>
         </div>
       </div>
 
