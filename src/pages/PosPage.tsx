@@ -50,6 +50,9 @@ export function PosPage() {
   // Product waiting for the cashier to choose its options
   const [picking, setPicking] = useState<{ product: Product; groups: ModifierGroup[]; selected: number[] } | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'TRANSFER'>('CASH');
+  // Shown on the comanda so the bar can call the order without asking again
+  const [customerName, setCustomerName] = useState('');
+  const [orderNote, setOrderNote] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   // Phones show the order as a bottom sheet
   const [orderOpen, setOrderOpen] = useState(false);
@@ -129,16 +132,20 @@ export function PosPage() {
     if (cart.length === 0) return;
     setIsProcessing(true);
     try {
-      await api.post('/sales', {
+      const sale = unwrap<{ id: number }>(await api.post('/sales', {
         items: cart.map(item => ({
           productId: item.product.id,
           quantity: item.quantity,
           ...(item.options.length > 0 && { modifierOptionIds: item.options.map(o => o.id) }),
         })),
-        paymentMethod
-      });
-      alert('¡Venta registrada!');
+        paymentMethod,
+        customerName: customerName.trim() || undefined,
+        notes: orderNote.trim() || undefined,
+      }));
+      alert(`¡Venta registrada! Comanda #${sale.id}`);
       setCart([]);
+      setCustomerName('');
+      setOrderNote('');
       setOrderOpen(false);
     } catch (err) {
       console.error(err);
@@ -293,6 +300,26 @@ export function PosPage() {
               <p className="text-ink/40 text-xs font-label">{itemCount} {itemCount === 1 ? 'producto' : 'productos'}</p>
             </div>
             <span className="font-headline text-3xl xl:text-4xl font-bold text-secondary">{formatMoney(total)}</span>
+          </div>
+
+          {/* Who it's for and special requests, shown on the comanda */}
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-2 mb-3">
+            <input
+              value={customerName}
+              onChange={e => setCustomerName(e.target.value)}
+              maxLength={60}
+              placeholder="Nombre"
+              aria-label="Nombre del cliente"
+              className="min-w-0 px-3 py-2.5 bg-ink/5 border border-ink/10 rounded-xl text-ink text-sm focus:border-primary/50 focus:outline-none placeholder:text-ink/30"
+            />
+            <input
+              value={orderNote}
+              onChange={e => setOrderNote(e.target.value)}
+              maxLength={500}
+              placeholder="Nota (sin hielo, para llevar...)"
+              aria-label="Nota del pedido"
+              className="min-w-0 px-3 py-2.5 bg-ink/5 border border-ink/10 rounded-xl text-ink text-sm focus:border-primary/50 focus:outline-none placeholder:text-ink/30"
+            />
           </div>
 
           {/* Payment Methods */}

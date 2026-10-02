@@ -1,0 +1,231 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { BellRing, Check, ChefHat, Loader2, MessageSquareText, RotateCcw, User } from 'lucide-react';
+import * as motion from 'motion/react-client';
+import { api } from '../lib/api';
+import { cn } from '../lib/cn';
+import { unwrap } from '../lib/unwrap';
+import { getErrorMessage } from '../lib/errors';
+
+type OrderStatus = 'PENDING' | 'READY' | 'DELIVERED';
+
+interface Order {
+  id: number;
+  createdAt: string;
+  orderStatus: OrderStatus;
+  customerName: string | null;
+  notes: string | null;
+  user: { name: string };
+  items: {
+    id: number;
+    quantity: number;
+    product: { name: string };
+    modifiers: { name: string }[];
+  }[];
+}
+
+type Filter = 'all' | OrderStatus;
+
+const REFRESH_MS = 8000;
+
+function minutesAgo(iso: string) {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return 'ahora';
+  if (mins < 60) return `hace ${mins} min`;
+  return `hace ${Math.floor(mins / 60)} h ${mins % 60} min`;
+}
+
+/** Short beep so the bar notices a new order without watching the screen. */
+function beep() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.4);
+  } catch {
+    // Audio blocked until the user interacts with the page
+  }
+}
+
+/** Comandas: what was ordered, with its options and notes, until it is handed out. */
+export function OrdersPage() {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<Filter>('all');
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const seen = useRef<Set<number> | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const list = unwrap<Order[]>(await api.get('/sales/orders'));
+      // Ring only for orders that arrived after the first load
+      if (seen.current && list.some(o => !seen.current!.has(o.id))) beep();
+      seen.current = new Set(list.map(o => o.id));
+      setOrders(list);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const first = setTimeout(load, 0);
+    const timer = setInterval(load, REFRESH_MS);
+    return () => { clearTimeout(first); clearInterval(timer); };
+  }, [load]);
+
+  const setStatus = async (order: Order, orderStatus: OrderStatus) => {
+    setBusyId(order.id);
+    try {
+      await api.patch(`/sales/${order.id}/order-status`, { orderStatus });
+      if (orderStatus === 'DELIVERED') setOrders(prev => prev.filter(o => o.id !== order.id));
+      else setOrders(prev => prev.map(o => o.id === order.id ? { ...o, orderStatus } : o));
+    } catch (err) {
+      alert('Error: ' + getErrorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const pendingCount = orders.filter(o => o.orderStatus === 'PENDING').length;
+  const readyCount = orders.filter(o => o.orderStatus === 'READY').length;
+  const visible = filter === 'all' ? orders : orders.filter(o => o.orderStatus === filter);
+
+  const chips: [Filter, string][] = [
+    ['all', `Todas (${orders.length})`],
+    ['PENDING', `Preparando (${pendingCount})`],
+    ['READY', `Listas (${readyCount})`],
+  ];
+
+  return (
+    <div className="flex flex-col gap-4 sm:gap-6">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+          <h1 className="font-headline text-2xl sm:text-3xl font-bold text-ink tracking-tight">Comandas</h1>
+          <p className="text-ink/50 text-sm font-label uppercase tracking-wider mt-1">Pedidos por preparar y entregar</p>
+        </div>
+        <div className="flex gap-2 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
+          {chips.map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setFilter(key)}
+              className={cn(
+                'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all shrink-0',
+                filter === key ? 'bg-primary text-on-primary font-bold' : 'bg-ink/5 border border-ink/10 text-ink/60 hover:text-ink'
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="glass-panel p-10 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+      ) : visible.length === 0 ? (
+        <div className="glass-panel p-10 text-center text-ink/40">
+          <ChefHat className="w-10 h-10 mx-auto mb-3 opacity-50" />
+          {orders.length === 0 ? 'No hay pedidos pendientes' : 'Nada en este filtro'}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 items-start">
+          {visible.map(order => {
+            const ready = order.orderStatus === 'READY';
+            const busy = busyId === order.id;
+            return (
+              <motion.div
+                key={order.id}
+                layout
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={cn('glass-panel p-4 sm:p-5 border-t-4', ready ? 'border-t-secondary' : 'border-t-primary')}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-headline text-2xl font-bold text-ink leading-none">#{order.id}</p>
+                    {order.customerName && (
+                      <p className="flex items-center gap-1.5 text-primary font-bold mt-1.5 truncate">
+                        <User className="w-4 h-4 shrink-0" /> {order.customerName}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className={cn(
+                      'inline-block px-2 py-0.5 rounded text-[10px] font-label uppercase tracking-widest font-bold',
+                      ready ? 'bg-secondary/15 text-secondary' : 'bg-primary/15 text-primary'
+                    )}>
+                      {ready ? 'Lista' : 'Preparando'}
+                    </span>
+                    <p className="text-ink/40 text-xs mt-1">{minutesAgo(order.createdAt)}</p>
+                  </div>
+                </div>
+
+                <ul className="mt-4 space-y-3">
+                  {order.items.map(item => (
+                    <li key={item.id}>
+                      <p className="text-ink font-bold">
+                        <span className="font-mono text-primary mr-1.5">{item.quantity}×</span>
+                        {item.product.name}
+                      </p>
+                      {item.modifiers.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-1.5 ml-7">
+                          {item.modifiers.map((m, i) => (
+                            <span key={i} className="px-2 py-0.5 rounded-md bg-accent/15 text-ink text-xs font-semibold">{m.name}</span>
+                          ))}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+
+                {order.notes && (
+                  <p className="mt-4 p-3 rounded-xl bg-warning/10 border border-warning/30 text-ink text-sm flex gap-2">
+                    <MessageSquareText className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+                    <span className="whitespace-pre-line break-words min-w-0">{order.notes}</span>
+                  </p>
+                )}
+
+                <p className="text-ink/30 text-xs mt-4">Cobró {order.user.name}</p>
+
+                <div className="flex gap-2 mt-3">
+                  {ready ? (
+                    <>
+                      <button
+                        onClick={() => setStatus(order, 'PENDING')}
+                        disabled={busy}
+                        className="px-3 py-3 rounded-xl bg-ink/5 border border-ink/10 text-ink/60 hover:text-ink disabled:opacity-50"
+                        aria-label={`Regresar #${order.id} a preparando`}
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setStatus(order, 'DELIVERED')}
+                        disabled={busy}
+                        className="flex-1 py-3 rounded-xl bg-cta-alt text-on-secondary font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Check className="w-5 h-5" /> Entregada</>}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setStatus(order, 'READY')}
+                      disabled={busy}
+                      className="flex-1 py-3 rounded-xl bg-cta text-on-primary font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <><BellRing className="w-5 h-5" /> Lista</>}
+                    </button>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
