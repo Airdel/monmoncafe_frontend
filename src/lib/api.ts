@@ -37,7 +37,9 @@ api.interceptors.response.use(
         
         if (!res.ok) throw new Error('Refresh failed');
         
-        const data = await res.json();
+        // Unwrap the TransformInterceptor envelope ({ success, data })
+        const body = await res.json();
+        const data = body?.data ?? body;
         auth.setAuth(auth.user!, data.accessToken, data.refreshToken);
         
         originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
