@@ -8,6 +8,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { PosPage } from './pages/PosPage';
 import { FinancePage } from './pages/FinancePage';
 import { OrdersPage } from './pages/OrdersPage';
+import { ShoppingListPage } from './pages/ShoppingListPage';
 import { LoginPage } from './pages/LoginPage';
 import { useAuthStore } from './store/auth';
 
@@ -39,6 +40,7 @@ function App() {
             <Route path="/inventory" element={<InventoryPage />} />
             <Route path="/pos" element={<PosPage />} />
             <Route path="/orders" element={<OrdersPage />} />
+            <Route path="/shopping" element={<ShoppingListPage />} />
             <Route path="/finance" element={<FinancePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
