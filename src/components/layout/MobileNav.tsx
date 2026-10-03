@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { LogOut, Palette } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { useAuthStore } from '../../store/auth';
-import { logout, navItems, ROLE_LABELS } from './nav';
+import { logout, navItemsFor, ROLE_LABELS } from './nav';
 
 /** Phone header: brand, current user, themes and logout. */
 export function MobileTopBar({ onOpenThemes }: { onOpenThemes: () => void }) {
@@ -28,10 +28,13 @@ export function MobileTopBar({ onOpenThemes }: { onOpenThemes: () => void }) {
 
 /** Phone tab bar, reachable with the thumb. */
 export function BottomNav() {
+  const role = useAuthStore(state => state.user?.role);
+  const items = navItemsFor(role);
+
   return (
     <nav className="md:hidden shrink-0 pb-safe border-t border-ink/10 bg-nav/90 backdrop-blur-3xl z-40">
-      <div className="grid grid-cols-6 h-16">
-        {navItems.map(item => {
+      <div className="grid h-16" style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
+        {items.map(item => {
           const Icon = item.icon;
           return (
             <NavLink

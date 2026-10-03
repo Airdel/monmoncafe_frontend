@@ -10,10 +10,12 @@ import { FinancePage } from './pages/FinancePage';
 import { OrdersPage } from './pages/OrdersPage';
 import { ShoppingListPage } from './pages/ShoppingListPage';
 import { LoginPage } from './pages/LoginPage';
+import { UsersPage } from './pages/UsersPage';
 import { useAuthStore } from './store/auth';
 
 function App() {
-  const { accessToken } = useAuthStore();
+  const { accessToken, user } = useAuthStore();
+  const isAdmin = user?.role === 'ADMIN';
   const [showThemes, setShowThemes] = useState(false);
   const openThemes = () => setShowThemes(true);
 
@@ -42,6 +44,7 @@ function App() {
             <Route path="/orders" element={<OrdersPage />} />
             <Route path="/shopping" element={<ShoppingListPage />} />
             <Route path="/finance" element={<FinancePage />} />
+            {isAdmin && <Route path="/users" element={<UsersPage />} />}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
