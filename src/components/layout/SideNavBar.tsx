@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { Coffee, LogOut, Palette } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { useAuthStore } from '../../store/auth';
-import { logout, navItems, ROLE_LABELS } from './nav';
+import { logout, navItemsFor, ROLE_LABELS } from './nav';
 
 /** Tablet (md): compact icon rail. Desktop (lg+): full sidebar. Hidden on phones. */
 export function SideNavBar({ onOpenThemes }: { onOpenThemes: () => void }) {
@@ -20,7 +20,7 @@ export function SideNavBar({ onOpenThemes }: { onOpenThemes: () => void }) {
         </div>
 
         <nav className="space-y-2">
-          {navItems.map((item) => {
+          {navItemsFor(user?.role).map((item) => {
             const Icon = item.icon;
             return (
               <NavLink
