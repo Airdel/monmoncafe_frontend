@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, Plus, Send, X, Save, Trash2, ArrowUpDown, Layers, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, ChevronLeft, ChevronRight, Plus, Send, X, Save, Trash2, ArrowUpDown, Layers, type LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { getErrorMessage } from '../lib/errors';
 import { useAuthStore } from '../store/auth';
 import { Modal } from '../components/ui/Modal';
 import { ModifiersTab } from '../components/inventory/ModifiersTab';
+import { SearchInput } from '../components/ui/SearchInput';
+import { cn } from '../lib/cn';
+import { matchesSearch } from '../lib/search';
 import * as motion from 'motion/react-client';
 
 interface Ingredient {
@@ -54,10 +57,12 @@ export function InventoryPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Stock filter
+  // Stock filter and search
   const [stockFilter, setStockFilter] = useState<StockFilter>('all');
+  const [stockSearch, setStockSearch] = useState('');
 
   // Recipe composer
+  const [recipeSearch, setRecipeSearch] = useState('');
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
   const [recipe, setRecipe] = useState<RecipeIngredient[]>([]);
   const [recipeLoading, setRecipeLoading] = useState(false);
@@ -106,9 +111,22 @@ export function InventoryPage() {
       .finally(() => setRecipeLoading(false));
   }, [selectedProductId]);
 
-  const filteredIngredients = stockFilter === 'low'
-    ? ingredients.filter(i => Number(i.currentStock) <= Number(i.minStock))
-    : ingredients;
+  const filteredIngredients = ingredients.filter(i =>
+    (stockFilter === 'all' || Number(i.currentStock) <= Number(i.minStock)) &&
+    matchesSearch(stockSearch, i.name, i.supplier?.name)
+  );
+  const emptyStockMessage = stockSearch
+    ? `Ningún insumo coincide con "${stockSearch}"`
+    : stockFilter === 'low' ? 'No hay ingredientes con stock bajo ✅' : 'No hay ingredientes registrados';
+
+  const filteredProducts = products.filter(p => matchesSearch(recipeSearch, p.name, p.category?.name));
+
+  const selectProduct = (id: number | null) => {
+    setSelectedProductId(id);
+    setRecipeLoading(!!id);
+    setEditingRecipe(false);
+    if (!id) { setRecipe([]); setSelectedProduct(null); }
+  };
 
   const lowStockCount = ingredients.filter(i => Number(i.currentStock) <= Number(i.minStock)).length;
 
@@ -229,7 +247,8 @@ export function InventoryPage() {
       {/* ═══ TAB: STOCK ═══ */}
       {activeTab === 'stock' && (
         <div className="flex-1 flex flex-col gap-4 min-h-0">
-          {/* Stock filter */}
+          {/* Stock filter and search */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           <div className="flex bg-ink/5 rounded-full p-1 border border-ink/10 w-fit">
             <button
               onClick={() => setStockFilter('all')}
@@ -250,6 +269,8 @@ export function InventoryPage() {
               Stock bajo ({lowStockCount})
             </button>
           </div>
+          <SearchInput value={stockSearch} onChange={setStockSearch} placeholder="Buscar insumo o proveedor" className="w-full sm:max-w-xs" />
+          </div>
 
           {/* Stock cards (phones and portrait tablets) */}
           <div className="lg:hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -260,7 +281,7 @@ export function InventoryPage() {
               </div>
             ) : filteredIngredients.length === 0 ? (
               <div className="glass-panel py-8 px-4 text-center text-ink/40 sm:col-span-2">
-                {stockFilter === 'low' ? 'No hay ingredientes con stock bajo ✅' : 'No hay ingredientes registrados'}
+                {emptyStockMessage}
               </div>
             ) : filteredIngredients.map(item => {
               const isLow = Number(item.currentStock) <= Number(item.minStock);
@@ -330,7 +351,7 @@ export function InventoryPage() {
                 ) : filteredIngredients.length === 0 ? (
                   <tr>
                     <td colSpan={canManage ? 7 : 6} className="py-8 text-center text-ink/40">
-                      {stockFilter === 'low' ? 'No hay ingredientes con stock bajo ✅' : 'No hay ingredientes registrados'}
+                      {emptyStockMessage}
                     </td>
                   </tr>
                 ) : filteredIngredients.map((item, idx) => {
@@ -386,29 +407,89 @@ export function InventoryPage() {
       {/* ═══ TAB: RECIPES ═══ */}
       {activeTab === 'recipes' && (
         <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
-          {/* Product Selector */}
-          <div className="flex-1 flex flex-col gap-4 min-w-0">
-            <div className="glass-panel p-4 sm:p-6">
-              <label className="text-ink/50 text-xs font-label uppercase tracking-widest block mb-3">Seleccionar Producto</label>
-              <div className="relative">
-                <select
-                  value={selectedProductId || ''}
-                  onChange={e => {
-                    const id = Number(e.target.value) || null;
-                    setSelectedProductId(id);
-                    setRecipeLoading(!!id);
-                    if (!id) { setRecipe([]); setSelectedProduct(null); }
-                  }}
-                  className="w-full px-4 py-3 bg-ink/5 border border-ink/10 rounded-xl text-ink appearance-none cursor-pointer focus:border-primary/50 focus:outline-none transition-colors [&>option]:bg-raised [&>option]:text-ink"
+          {/* Product list (on phones it gives way to the chosen recipe) */}
+          <div className={cn('glass-panel p-3 sm:p-4 flex flex-col gap-3 lg:w-72 shrink-0 min-h-0', selectedProductId && 'hidden lg:flex')}>
+            <SearchInput value={recipeSearch} onChange={setRecipeSearch} placeholder="Buscar producto o categoría" />
+            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin -mx-1 px-1 space-y-1">
+              {loading ? (
+                <div className="py-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></div>
+              ) : filteredProducts.length === 0 ? (
+                <p className="py-8 text-center text-ink/40 text-sm">{recipeSearch ? `Ningún producto coincide con "${recipeSearch}"` : 'No hay productos'}</p>
+              ) : filteredProducts.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => selectProduct(p.id)}
+                  className={cn(
+                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left border border-transparent transition-all',
+                    selectedProductId === p.id ? 'bg-primary/10 border-primary/20 text-primary' : 'text-ink/80 hover:bg-ink/5'
+                  )}
                 >
-                  <option value="">— Elige un producto —</option>
-                  {products.map(p => (
-                    <option key={p.id} value={p.id}>{p.name} {p.category ? `(${p.category.name})` : ''}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/40 pointer-events-none" />
-              </div>
+                  <span className="flex-1 min-w-0">
+                    <span className="block font-medium truncate">{p.name}</span>
+                    {p.category && <span className="block text-xs text-ink/40 truncate">{p.category.name}</span>}
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-ink/30 shrink-0" />
+                </button>
+              ))}
             </div>
+          </div>
+
+          {!selectedProductId && (
+            <div className="hidden lg:flex flex-1 glass-panel items-center justify-center text-ink/40 p-8">
+              Elige un producto para ver su receta
+            </div>
+          )}
+
+          {selectedProductId && (
+          <div className="flex-1 flex flex-col gap-4 min-w-0">
+            <button onClick={() => selectProduct(null)} className="lg:hidden self-start flex items-center gap-1 text-primary text-sm font-medium -ml-1">
+              <ChevronLeft className="w-4 h-4" /> Todas las recetas
+            </button>
+
+            {/* Recipe Summary Card */}
+            {selectedProduct && (
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="w-full">
+                <div className="glass-panel p-5 sm:p-6 border-t-2 border-t-primary relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-10"><Coffee className="w-32 h-32" /></div>
+                  <div className="relative z-10">
+                    <div className="flex justify-between items-start mb-6">
+                      <div>
+                        <h3 className="font-headline text-xl font-bold text-ink">{selectedProduct.name}</h3>
+                        <p className="text-ink/40 text-xs mt-1">{selectedProduct.category?.name} · {selectedProduct.size || 'Estándar'}</p>
+                      </div>
+                      <span className="px-2 py-1 bg-primary/20 text-primary text-[10px] font-label tracking-widest uppercase rounded">{recipe.length} items</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3 mb-4">
+                      <div className="bg-canvas/60 p-3 rounded-xl border border-ink/5">
+                        <p className="text-ink/40 text-xs mb-1">Costo</p>
+                        <p className="font-mono text-secondary font-medium">${recipeCost.toFixed(2)}</p>
+                      </div>
+                      <div className="bg-canvas/60 p-3 rounded-xl border border-ink/5">
+                        <p className="text-ink/40 text-xs mb-1">Precio</p>
+                        <p className="font-mono text-primary font-medium">${sellingPrice.toFixed(2)}</p>
+                      </div>
+                      <div className="bg-canvas/60 p-3 rounded-xl border border-ink/5">
+                        <p className="text-ink/40 text-xs mb-1">Margen</p>
+                        <p className={`font-mono font-medium ${margin > 50 ? 'text-secondary' : margin > 30 ? 'text-warning' : 'text-error'}`}>{margin.toFixed(0)}%</p>
+                      </div>
+                    </div>
+                    {/* Edit / Save buttons */}
+                    {editingRecipe ? (
+                      <div className="flex gap-2">
+                        <button onClick={() => setEditingRecipe(false)} className="flex-1 py-2.5 rounded-xl border border-ink/10 text-ink/60 hover:text-ink text-sm font-medium flex items-center justify-center gap-1"><X className="w-4 h-4" /> Cancelar</button>
+                        <button onClick={saveRecipe} disabled={recipeSaving} className="flex-1 py-2.5 rounded-xl bg-cta-alt text-on-secondary font-bold text-sm flex items-center justify-center gap-1 disabled:opacity-50">
+                          {recipeSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4" /> Guardar</>}
+                        </button>
+                      </div>
+                    ) : canManage && (
+                      <button onClick={startEditRecipe} className="w-full py-2.5 rounded-xl bg-ink/5 border border-ink/10 text-ink/70 hover:text-primary hover:border-primary/30 text-sm font-medium flex items-center justify-center gap-2 transition-all">
+                        <SlidersHorizontal className="w-4 h-4" /> Editar Receta
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
 
             {/* Recipe Table */}
             {selectedProductId && (
@@ -476,51 +557,8 @@ export function InventoryPage() {
               </div>
             )}
           </div>
-
-          {/* Recipe Summary Card */}
-          {selectedProduct && (
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="w-full lg:w-80 shrink-0">
-              <div className="glass-panel p-5 sm:p-6 border-t-2 border-t-primary relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-10"><Coffee className="w-32 h-32" /></div>
-                <div className="relative z-10">
-                  <div className="flex justify-between items-start mb-6">
-                    <div>
-                      <h3 className="font-headline text-xl font-bold text-ink">{selectedProduct.name}</h3>
-                      <p className="text-ink/40 text-xs mt-1">{selectedProduct.category?.name} · {selectedProduct.size || 'Estándar'}</p>
-                    </div>
-                    <span className="px-2 py-1 bg-primary/20 text-primary text-[10px] font-label tracking-widest uppercase rounded">{recipe.length} items</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 mb-4">
-                    <div className="bg-canvas/60 p-3 rounded-xl border border-ink/5">
-                      <p className="text-ink/40 text-xs mb-1">Costo</p>
-                      <p className="font-mono text-secondary font-medium">${recipeCost.toFixed(2)}</p>
-                    </div>
-                    <div className="bg-canvas/60 p-3 rounded-xl border border-ink/5">
-                      <p className="text-ink/40 text-xs mb-1">Precio</p>
-                      <p className="font-mono text-primary font-medium">${sellingPrice.toFixed(2)}</p>
-                    </div>
-                    <div className="bg-canvas/60 p-3 rounded-xl border border-ink/5">
-                      <p className="text-ink/40 text-xs mb-1">Margen</p>
-                      <p className={`font-mono font-medium ${margin > 50 ? 'text-secondary' : margin > 30 ? 'text-warning' : 'text-error'}`}>{margin.toFixed(0)}%</p>
-                    </div>
-                  </div>
-                  {/* Edit / Save buttons */}
-                  {editingRecipe ? (
-                    <div className="flex gap-2">
-                      <button onClick={() => setEditingRecipe(false)} className="flex-1 py-2.5 rounded-xl border border-ink/10 text-ink/60 hover:text-ink text-sm font-medium flex items-center justify-center gap-1"><X className="w-4 h-4" /> Cancelar</button>
-                      <button onClick={saveRecipe} disabled={recipeSaving} className="flex-1 py-2.5 rounded-xl bg-cta-alt text-on-secondary font-bold text-sm flex items-center justify-center gap-1 disabled:opacity-50">
-                        {recipeSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4" /> Guardar</>}
-                      </button>
-                    </div>
-                  ) : canManage && (
-                    <button onClick={startEditRecipe} className="w-full py-2.5 rounded-xl bg-ink/5 border border-ink/10 text-ink/70 hover:text-primary hover:border-primary/30 text-sm font-medium flex items-center justify-center gap-2 transition-all">
-                      <SlidersHorizontal className="w-4 h-4" /> Editar Receta
-                    </button>
-                  )}
-                </div>
-              </div>
-            </motion.div>
           )}
+
         </div>
       )}
 

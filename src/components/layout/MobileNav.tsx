@@ -30,7 +30,7 @@ export function MobileTopBar({ onOpenThemes }: { onOpenThemes: () => void }) {
 export function BottomNav() {
   return (
     <nav className="md:hidden shrink-0 pb-safe border-t border-ink/10 bg-nav/90 backdrop-blur-3xl z-40">
-      <div className="grid grid-cols-5 h-16">
+      <div className="grid grid-cols-6 h-16">
         {navItems.map(item => {
           const Icon = item.icon;
           return (
@@ -39,7 +39,7 @@ export function BottomNav() {
               to={item.path}
               end={item.path === '/'}
               className={({ isActive }) => cn(
-                "flex flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors",
+                "flex flex-col items-center justify-center gap-1 text-[10px] font-medium transition-colors min-w-0",
                 isActive ? "text-primary" : "text-ink/50"
               )}
             >
