@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { Calculator, History, Wallet, type LucideIcon } from 'lucide-react';
+import { Calculator, History, Receipt, Wallet, type LucideIcon } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { ClosingTab } from '../components/finance/ClosingTab';
 import { HistoryTab } from '../components/finance/HistoryTab';
 import { ExpensesTab } from '../components/finance/ExpensesTab';
+import { SalesTab } from '../components/finance/SalesTab';
 
-type Tab = 'closing' | 'history' | 'expenses';
+type Tab = 'closing' | 'history' | 'sales' | 'expenses';
 
 export function FinancePage() {
   const role = useAuthStore(state => state.user?.role);
+  // Sales with their costs and fixed expenses are for admins and supervisors
   const canManageExpenses = role === 'ADMIN' || role === 'SUPERVISOR';
   const [activeTab, setActiveTab] = useState<Tab>('closing');
   // Bumped after closing a day so the history refetches
@@ -17,7 +19,12 @@ export function FinancePage() {
   const tabs: { key: Tab; label: string; icon: LucideIcon }[] = [
     { key: 'closing', label: 'Corte del día', icon: Calculator },
     { key: 'history', label: 'Historial', icon: History },
-    ...(canManageExpenses ? [{ key: 'expenses' as const, label: 'Gastos fijos', icon: Wallet }] : []),
+    ...(canManageExpenses
+      ? [
+          { key: 'sales' as const, label: 'Ventas', icon: Receipt },
+          { key: 'expenses' as const, label: 'Gastos fijos', icon: Wallet },
+        ]
+      : []),
   ];
 
   return (
@@ -25,7 +32,7 @@ export function FinancePage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="font-headline text-2xl sm:text-3xl font-bold text-ink tracking-tight">Finanzas</h1>
-          <p className="text-ink/50 text-sm font-label uppercase tracking-wider mt-1">Corte de caja y gastos fijos</p>
+          <p className="text-ink/50 text-sm font-label uppercase tracking-wider mt-1">Corte de caja, ventas y gastos fijos</p>
         </div>
 
         <div className="flex w-full sm:w-auto bg-ink/5 rounded-xl p-1 border border-ink/10 overflow-x-auto scrollbar-none">
@@ -47,6 +54,7 @@ export function FinancePage() {
 
       {activeTab === 'closing' && <ClosingTab onClosed={() => setHistoryKey(k => k + 1)} />}
       {activeTab === 'history' && <HistoryTab isAdmin={role === 'ADMIN'} reloadKey={historyKey} />}
+      {activeTab === 'sales' && canManageExpenses && <SalesTab />}
       {activeTab === 'expenses' && canManageExpenses && <ExpensesTab />}
     </div>
   );
