@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, ChevronLeft, ChevronRight, Plus, Send, X, Save, Trash2, ArrowUpDown, Layers, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, ChevronLeft, ChevronRight, Plus, Send, X, Save, Trash2, ArrowUpDown, Layers, Store, type LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { getErrorMessage } from '../lib/errors';
 import { useAuthStore } from '../store/auth';
 import { Modal } from '../components/ui/Modal';
 import { ModifiersTab } from '../components/inventory/ModifiersTab';
+import { SuppliersTab } from '../components/inventory/SuppliersTab';
 import { SearchInput } from '../components/ui/SearchInput';
 import { cn } from '../lib/cn';
 import { matchesSearch } from '../lib/search';
@@ -44,7 +45,7 @@ interface Supplier {
   name: string;
 }
 
-type Tab = 'stock' | 'recipes' | 'modifiers' | 'purchases';
+type Tab = 'stock' | 'recipes' | 'modifiers' | 'purchases' | 'suppliers';
 type StockFilter = 'all' | 'low';
 
 export function InventoryPage() {
@@ -97,6 +98,16 @@ export function InventoryPage() {
     }).catch(err => console.error(err))
       .finally(() => setLoading(false));
   }, []);
+
+  // After editing suppliers, refresh the pickers and the supplier names shown on ingredients
+  const reloadSuppliers = () => {
+    Promise.all([api.get('/suppliers'), api.get('/inventory/ingredients')])
+      .then(([supRes, ingRes]) => {
+        setSuppliers(supRes.data.data || supRes.data);
+        setIngredients(ingRes.data.data || ingRes.data);
+      })
+      .catch(err => console.error(err));
+  };
 
   // Load recipe when product selected
   useEffect(() => {
@@ -210,7 +221,10 @@ export function InventoryPage() {
     { key: 'stock', label: 'Stock', icon: Package },
     { key: 'recipes', label: 'Recetas', icon: SlidersHorizontal },
     { key: 'modifiers', label: 'Opciones', icon: Layers },
-    ...(canManage ? [{ key: 'purchases' as const, label: 'Compras', icon: ShoppingCart }] : []),
+    ...(canManage ? [
+      { key: 'purchases' as const, label: 'Compras', icon: ShoppingCart },
+      { key: 'suppliers' as const, label: 'Tiendas', icon: Store },
+    ] : []),
   ];
 
   return (
@@ -565,6 +579,11 @@ export function InventoryPage() {
       {/* ═══ TAB: MODIFIERS ═══ */}
       {activeTab === 'modifiers' && (
         <ModifiersTab ingredients={ingredients} products={products} canManage={canManage} />
+      )}
+
+      {/* ═══ TAB: SUPPLIERS ═══ */}
+      {activeTab === 'suppliers' && canManage && (
+        <SuppliersTab onChanged={reloadSuppliers} />
       )}
 
       {/* ═══ TAB: PURCHASES ═══ */}
