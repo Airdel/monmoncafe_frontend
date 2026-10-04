@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, ChevronLeft, ChevronRight, Plus, Send, X, Save, Trash2, ArrowUpDown, Layers, Store, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, ChevronLeft, ChevronRight, Plus, Send, X, Save, Trash2, ArrowUpDown, Layers, Store, Pencil, EyeOff, type LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { getErrorMessage } from '../lib/errors';
 import { useAuthStore } from '../store/auth';
 import { Modal } from '../components/ui/Modal';
 import { ModifiersTab } from '../components/inventory/ModifiersTab';
 import { SuppliersTab } from '../components/inventory/SuppliersTab';
+import { ProductEditModal, type EditableProduct } from '../components/inventory/ProductEditModal';
+import { productImageSrc } from '../lib/images';
 import { SearchInput } from '../components/ui/SearchInput';
 import { cn } from '../lib/cn';
 import { matchesSearch } from '../lib/search';
@@ -27,6 +29,9 @@ interface Product {
   id: number;
   name: string;
   sellingPrice: string;
+  categoryId: number;
+  isActive: boolean;
+  imageUrl?: string | null;
   category?: { name: string };
 }
 
@@ -74,6 +79,9 @@ export function InventoryPage() {
   const [editingRecipe, setEditingRecipe] = useState(false);
   const [editRecipeRows, setEditRecipeRows] = useState<{ ingredientId: number; quantityUsed: string }[]>([]);
   const [recipeSaving, setRecipeSaving] = useState(false);
+
+  // Name, POS category, visibility and photo
+  const [editingProduct, setEditingProduct] = useState(false);
 
   // Adjustment modal
   const [adjustModal, setAdjustModal] = useState<Ingredient | null>(null);
@@ -128,6 +136,7 @@ export function InventoryPage() {
     setSelectedProductId(id);
     setRecipeLoading(!!id);
     setEditingRecipe(false);
+    setEditingProduct(false);
     if (!id) { setRecipe([]); setSelectedProduct(null); }
   };
 
@@ -182,6 +191,12 @@ export function InventoryPage() {
     } finally {
       setAdjustSubmitting(false);
     }
+  };
+
+  const productSaved = (saved: EditableProduct) => {
+    setProducts(prev => prev.map(p => p.id === saved.id ? { ...p, ...saved } : p));
+    setSelectedProduct(prev => prev && prev.id === saved.id ? { ...prev, ...saved } : prev);
+    setEditingProduct(false);
   };
 
   // Recipe editing helpers
@@ -428,9 +443,16 @@ export function InventoryPage() {
                     selectedProductId === p.id ? 'bg-primary/10 border-primary/20 text-primary' : 'text-ink/80 hover:bg-ink/5'
                   )}
                 >
-                  <span className="flex-1 min-w-0">
+                  <span className="w-9 h-9 rounded-lg overflow-hidden bg-primary/10 shrink-0 flex items-center justify-center">
+                    {p.imageUrl
+                      ? <img src={productImageSrc(p.imageUrl) ?? undefined} alt="" loading="lazy" className="w-full h-full object-cover" />
+                      : <span className="font-headline font-bold text-xs text-primary/50">{p.name.substring(0, 2).toUpperCase()}</span>}
+                  </span>
+                  <span className={cn('flex-1 min-w-0', !p.isActive && 'opacity-50')}>
                     <span className="block font-medium truncate">{p.name}</span>
-                    {p.category && <span className="block text-xs text-ink/40 truncate">{p.category.name}</span>}
+                    <span className="block text-xs text-ink/40 truncate">
+                      {p.category?.name}{!p.isActive && ' · oculto en POS'}
+                    </span>
                   </span>
                   <ChevronRight className="w-4 h-4 text-ink/30 shrink-0" />
                 </button>
@@ -460,6 +482,11 @@ export function InventoryPage() {
                       <div>
                         <h3 className="font-headline text-xl font-bold text-ink">{selectedProduct.name}</h3>
                         <p className="text-ink/40 text-xs mt-1">{selectedProduct.category?.name} · {selectedProduct.size || 'Estándar'}</p>
+                        {selectedProduct.isActive === false && (
+                          <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded bg-error/15 text-error text-[10px] font-label uppercase tracking-widest">
+                            <EyeOff className="w-3 h-3" /> Oculto en POS
+                          </span>
+                        )}
                       </div>
                       <span className="px-2 py-1 bg-primary/20 text-primary text-[10px] font-label tracking-widest uppercase rounded">{recipe.length} items</span>
                     </div>
@@ -486,9 +513,14 @@ export function InventoryPage() {
                         </button>
                       </div>
                     ) : canManage && (
-                      <button onClick={startEditRecipe} className="w-full py-2.5 rounded-xl bg-ink/5 border border-ink/10 text-ink/70 hover:text-primary hover:border-primary/30 text-sm font-medium flex items-center justify-center gap-2 transition-all">
-                        <SlidersHorizontal className="w-4 h-4" /> Editar Receta
-                      </button>
+                      <div className="flex gap-2">
+                        <button onClick={() => setEditingProduct(true)} className="flex-1 py-2.5 rounded-xl bg-ink/5 border border-ink/10 text-ink/70 hover:text-primary hover:border-primary/30 text-sm font-medium flex items-center justify-center gap-2 transition-all">
+                          <Pencil className="w-4 h-4" /> Editar producto
+                        </button>
+                        <button onClick={startEditRecipe} className="flex-1 py-2.5 rounded-xl bg-ink/5 border border-ink/10 text-ink/70 hover:text-primary hover:border-primary/30 text-sm font-medium flex items-center justify-center gap-2 transition-all">
+                          <SlidersHorizontal className="w-4 h-4" /> Editar Receta
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -564,6 +596,10 @@ export function InventoryPage() {
           )}
 
         </div>
+      )}
+
+      {editingProduct && selectedProduct && (
+        <ProductEditModal product={selectedProduct} onClose={() => setEditingProduct(false)} onSaved={productSaved} />
       )}
 
       {/* ═══ TAB: MODIFIERS ═══ */}
