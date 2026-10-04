@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, ChevronLeft, ChevronRight, Plus, Send, X, Save, Trash2, ArrowUpDown, Layers, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, ChevronLeft, ChevronRight, Plus, Send, X, Save, Trash2, ArrowUpDown, Layers, Store, type LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { getErrorMessage } from '../lib/errors';
 import { useAuthStore } from '../store/auth';
 import { Modal } from '../components/ui/Modal';
 import { ModifiersTab } from '../components/inventory/ModifiersTab';
+import { SuppliersTab } from '../components/inventory/SuppliersTab';
 import { SearchInput } from '../components/ui/SearchInput';
 import { cn } from '../lib/cn';
 import { matchesSearch } from '../lib/search';
@@ -18,6 +19,7 @@ interface Ingredient {
   minStock: string;
   currentCostPerUnit: string;
   avgCostPerUnit: string;
+  supplierId?: number | null;
   supplier?: { name: string } | null;
 }
 
@@ -44,7 +46,7 @@ interface Supplier {
   name: string;
 }
 
-type Tab = 'stock' | 'recipes' | 'modifiers' | 'purchases';
+type Tab = 'stock' | 'recipes' | 'modifiers' | 'suppliers' | 'purchases';
 type StockFilter = 'all' | 'low';
 
 export function InventoryPage() {
@@ -85,7 +87,7 @@ export function InventoryPage() {
   const [purchaseSubmitting, setPurchaseSubmitting] = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState('');
 
-  useEffect(() => {
+  const loadAll = () =>
     Promise.all([
       api.get('/inventory/ingredients'),
       api.get('/products'),
@@ -96,7 +98,8 @@ export function InventoryPage() {
       setSuppliers(supRes.data.data || supRes.data);
     }).catch(err => console.error(err))
       .finally(() => setLoading(false));
-  }, []);
+
+  useEffect(() => { loadAll(); }, []);
 
   // Load recipe when product selected
   useEffect(() => {
@@ -210,6 +213,7 @@ export function InventoryPage() {
     { key: 'stock', label: 'Stock', icon: Package },
     { key: 'recipes', label: 'Recetas', icon: SlidersHorizontal },
     { key: 'modifiers', label: 'Opciones', icon: Layers },
+    { key: 'suppliers', label: 'Tiendas', icon: Store },
     ...(canManage ? [{ key: 'purchases' as const, label: 'Compras', icon: ShoppingCart }] : []),
   ];
 
@@ -565,6 +569,10 @@ export function InventoryPage() {
       {/* ═══ TAB: MODIFIERS ═══ */}
       {activeTab === 'modifiers' && (
         <ModifiersTab ingredients={ingredients} products={products} canManage={canManage} />
+      )}
+
+      {activeTab === 'suppliers' && (
+        <SuppliersTab ingredients={ingredients} canManage={canManage} onChanged={loadAll} />
       )}
 
       {/* ═══ TAB: PURCHASES ═══ */}
