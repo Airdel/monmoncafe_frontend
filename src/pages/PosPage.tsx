@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Minus, Plus, Banknote, ArrowLeftRight, Zap, Loader2, ShoppingBag, ChevronDown, Clock } from 'lucide-react';
+import { Minus, Plus, Banknote, ArrowLeftRight, Zap, Loader2, ShoppingBag, ChevronDown, Clock, AlertTriangle } from 'lucide-react';
 import { cn } from '../lib/cn';
 import { api } from '../lib/api';
 import { formatMoney } from '../lib/format';
 import { getErrorMessage } from '../lib/errors';
 import { unwrap } from '../lib/unwrap';
-import { formatDelta, type ModifierGroup, type ModifierOption } from '../lib/modifiers';
+import { formatDelta, unitLabel, type ModifierGroup, type ModifierOption } from '../lib/modifiers';
 import { Modal } from '../components/ui/Modal';
 import * as motion from 'motion/react-client';
 
@@ -35,6 +35,29 @@ interface CartLine {
 const lineKey = (productId: number, options: ModifierOption[]) =>
   [productId, ...options.map(o => o.id).sort((a, b) => a - b)].join('-');
 
+/** An ingredient the order leaves with negative stock. */
+interface StockWarning {
+  ingredientId: number;
+  name: string;
+  unit: string;
+  needed: number;
+  available: number;
+  after: number;
+}
+
+const saleItems = (cart: CartLine[]) => cart.map(item => ({
+  productId: item.product.id,
+  quantity: item.quantity,
+  ...(item.options.length > 0 && { modifierOptionIds: item.options.map(o => o.id) }),
+}));
+
+const formatQty = (qty: number, unit: string) =>
+  `${qty.toLocaleString('es-MX', { maximumFractionDigits: 2 })} ${unitLabel(unit)}`;
+
+/** "Café (faltan 8 g)" for each ingredient the order runs out of. */
+const describeShortages = (warnings: StockWarning[]) =>
+  warnings.map(w => `${w.name} (faltan ${formatQty(-w.after, w.unit)})`).join(', ');
+
 const unitPrice = (line: Pick<CartLine, 'product' | 'options'>) =>
   Number(line.product.sellingPrice) + line.options.reduce((sum, o) => sum + Number(o.priceDelta), 0);
 
@@ -56,6 +79,9 @@ export function PosPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   // Phones show the order as a bottom sheet
   const [orderOpen, setOrderOpen] = useState(false);
+  // Ingredients the current cart would leave below zero, tagged with the cart they belong to
+  const [stockCheck, setStockCheck] = useState<{ cartKey: string; warnings: StockWarning[] } | null>(null);
+  const cartKey = cart.map(item => `${item.key}x${item.quantity}`).join(',');
 
   useEffect(() => {
     Promise.all([
@@ -73,6 +99,19 @@ export function PosPage() {
       console.error(err);
     }).finally(() => setLoading(false));
   }, []);
+
+  // Missing stock never blocks a sale, but the cashier should know before charging
+  useEffect(() => {
+    if (cart.length === 0) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      api.post('/sales/stock-check', { items: saleItems(cart) })
+        .then(res => { if (!cancelled) setStockCheck({ cartKey, warnings: unwrap<StockWarning[]>(res) }); })
+        .catch(() => { /* only a warning: if it fails, selling still works */ });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [cart, cartKey]);
+  const stockWarnings = cart.length > 0 && stockCheck?.cartKey === cartKey ? stockCheck.warnings : [];
 
   const addToCart = (product: Product, options: ModifierOption[] = []) => {
     const key = lineKey(product.id, options);
@@ -133,20 +172,19 @@ export function PosPage() {
     if (cart.length === 0) return;
     setIsProcessing(true);
     try {
-      const sale = unwrap<{ id: number }>(await api.post('/sales', {
-        items: cart.map(item => ({
-          productId: item.product.id,
-          quantity: item.quantity,
-          ...(item.options.length > 0 && { modifierOptionIds: item.options.map(o => o.id) }),
-        })),
+      const sale = unwrap<{ id: number; stockWarnings?: StockWarning[] }>(await api.post('/sales', {
+        items: saleItems(cart),
         paymentMethod,
         customerName: customerName.trim() || undefined,
         notes: orderNote.trim() || undefined,
         ...(payLater && { payLater: true }),
       }));
-      alert(payLater
+      const shortages = sale.stockWarnings?.length
+        ? `\n\nOjo: el inventario quedó en negativo en ${describeShortages(sale.stockWarnings)}.`
+        : '';
+      alert((payLater
         ? `Pedido enviado a comandas sin cobrar. Comanda #${sale.id}`
-        : `¡Venta registrada! Comanda #${sale.id}`);
+        : `¡Venta registrada! Comanda #${sale.id}`) + shortages);
       setCart([]);
       setCustomerName('');
       setOrderNote('');
@@ -305,6 +343,15 @@ export function PosPage() {
             </div>
             <span className="font-headline text-3xl xl:text-4xl font-bold text-secondary">{formatMoney(total)}</span>
           </div>
+
+          {stockWarnings.length > 0 && (
+            <div role="status" className="mb-3 p-3 rounded-xl border border-warning/40 bg-warning/10 text-sm flex gap-2">
+              <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+              <p className="text-ink/80">
+                <b className="text-warning">No alcanza el inventario:</b> {describeShortages(stockWarnings)}. Puedes cobrar igual; quedará en negativo.
+              </p>
+            </div>
+          )}
 
           {/* Who it's for and special requests, shown on the comanda */}
           <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-2 mb-3">

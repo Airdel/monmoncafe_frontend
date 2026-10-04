@@ -289,6 +289,7 @@ export function InventoryPage() {
               </div>
             ) : filteredIngredients.map(item => {
               const isLow = Number(item.currentStock) <= Number(item.minStock);
+              const isNegative = Number(item.currentStock) < 0;
               const stockPct = Number(item.minStock) > 0 ? (Number(item.currentStock) / (Number(item.minStock) * 3)) * 100 : 100;
               return (
                 <div key={item.id} className={`glass-panel p-4 ${isLow ? 'border-l-4 border-l-error' : ''}`}>
@@ -299,7 +300,7 @@ export function InventoryPage() {
                     </div>
                     {isLow ? (
                       <span className="flex items-center gap-1 text-error text-xs font-label font-bold uppercase shrink-0">
-                        <AlertTriangle className="w-4 h-4" /> Bajo
+                        <AlertTriangle className="w-4 h-4" /> {isNegative ? 'Negativo' : 'Bajo'}
                       </span>
                     ) : (
                       <CheckCircle2 className="w-5 h-5 text-secondary shrink-0" />
@@ -308,7 +309,7 @@ export function InventoryPage() {
                   <div className="flex items-end justify-between gap-3 mt-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm">
-                        <span className="font-mono text-ink/80">{Number(item.currentStock).toLocaleString()}</span>
+                        <span className={`font-mono ${isNegative ? 'text-error font-bold' : 'text-ink/80'}`}>{Number(item.currentStock).toLocaleString()}</span>
                         <span className="text-ink/40 text-xs"> {item.unit.toLowerCase()} · mín. {Number(item.minStock).toLocaleString()}</span>
                       </p>
                       <div className="w-full max-w-[10rem] h-1.5 bg-ink/10 rounded-full mt-1.5 overflow-hidden">
@@ -360,6 +361,7 @@ export function InventoryPage() {
                   </tr>
                 ) : filteredIngredients.map((item, idx) => {
                   const isLow = Number(item.currentStock) <= Number(item.minStock);
+                  const isNegative = Number(item.currentStock) < 0;
                   const stockPct = Number(item.minStock) > 0 ? (Number(item.currentStock) / (Number(item.minStock) * 3)) * 100 : 100;
                   return (
                     <motion.tr 
@@ -373,7 +375,7 @@ export function InventoryPage() {
                       <td className="py-4 px-6 text-ink/50">{item.supplier?.name || '—'}</td>
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-3">
-                          <span className="font-mono text-ink/80">{Number(item.currentStock).toLocaleString()}</span>
+                          <span className={`font-mono ${isNegative ? 'text-error font-bold' : 'text-ink/80'}`}>{Number(item.currentStock).toLocaleString()}</span>
                           <span className="text-ink/30 text-xs">{item.unit.toLowerCase()}</span>
                         </div>
                         <div className="w-20 h-1 bg-ink/10 rounded-full mt-1 overflow-hidden">
@@ -385,7 +387,7 @@ export function InventoryPage() {
                       <td className="py-4 px-6 flex justify-center">
                         {isLow ? (
                           <span className="flex items-center gap-1 text-error text-xs font-label font-bold uppercase">
-                            <AlertTriangle className="w-4 h-4" /> Bajo
+                            <AlertTriangle className="w-4 h-4" /> {isNegative ? 'Negativo' : 'Bajo'}
                           </span>
                         ) : (
                           <CheckCircle2 className="w-5 h-5 text-secondary" />
