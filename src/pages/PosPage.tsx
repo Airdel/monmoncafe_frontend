@@ -3,7 +3,7 @@ import { Minus, Plus, Banknote, ArrowLeftRight, Zap, Loader2, ShoppingBag, Chevr
 import { cn } from '../lib/cn';
 import { api } from '../lib/api';
 import { formatMoney } from '../lib/format';
-import { getErrorMessage } from '../lib/errors';
+import { notifyError, toast } from '../lib/dialogs';
 import { unwrap } from '../lib/unwrap';
 import { formatDelta, type ModifierGroup, type ModifierOption } from '../lib/modifiers';
 import { Modal } from '../components/ui/Modal';
@@ -144,16 +144,14 @@ export function PosPage() {
         notes: orderNote.trim() || undefined,
         ...(payLater && { payLater: true }),
       }));
-      alert(payLater
-        ? `Pedido enviado a comandas sin cobrar. Comanda #${sale.id}`
-        : `¡Venta registrada! Comanda #${sale.id}`);
+      if (payLater) toast.info(`Se cobra después desde Comandas. Comanda #${sale.id}`, 'Pedido enviado a comandas');
+      else toast.success(`Comanda #${sale.id}`, '¡Venta registrada!');
       setCart([]);
       setCustomerName('');
       setOrderNote('');
       setOrderOpen(false);
     } catch (err) {
-      console.error(err);
-      alert('Error al registrar la venta: ' + getErrorMessage(err));
+      notifyError(err, 'No se pudo registrar la venta');
     } finally {
       setIsProcessing(false);
     }

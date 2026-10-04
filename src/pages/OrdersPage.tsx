@@ -4,7 +4,7 @@ import * as motion from 'motion/react-client';
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { unwrap } from '../lib/unwrap';
-import { getErrorMessage } from '../lib/errors';
+import { notifyError } from '../lib/dialogs';
 import { formatMoney } from '../lib/format';
 import { Modal } from '../components/ui/Modal';
 
@@ -95,7 +95,7 @@ export function OrdersPage() {
       if (orderStatus === 'DELIVERED') setOrders(prev => prev.filter(o => o.id !== order.id));
       else setOrders(prev => prev.map(o => o.id === order.id ? { ...o, orderStatus } : o));
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     } finally {
       setBusyId(null);
     }
@@ -120,7 +120,7 @@ export function OrdersPage() {
       setCharging(null);
       if (deliver) await setStatus({ ...order, isPaid: true }, 'DELIVERED');
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     } finally {
       setPaying(false);
     }

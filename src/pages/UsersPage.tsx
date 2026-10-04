@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { KeyRound, Loader2, Pencil, Plus, Power, Save } from 'lucide-react';
 import { api } from '../lib/api';
 import { getErrorMessage } from '../lib/errors';
+import { confirm, notifyError } from '../lib/dialogs';
 import { unwrap } from '../lib/unwrap';
 import { useAuthStore } from '../store/auth';
 import { ROLE_LABELS } from '../components/layout/nav';
@@ -100,19 +101,24 @@ export function UsersPage() {
       setEditing(null);
       reload();
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     } finally {
       setSaving(false);
     }
   };
 
   const toggleActive = async (u: AppUser) => {
-    if (u.isActive && !window.confirm(`¿Desactivar a ${u.name}?\n\nYa no podrá iniciar sesión; sus ventas y cortes se conservan.`)) return;
+    if (u.isActive && !await confirm({
+      title: `¿Desactivar a ${u.name}?`,
+      message: 'Ya no podrá iniciar sesión; sus ventas y cortes se conservan.',
+      confirmLabel: 'Desactivar',
+      tone: 'danger',
+    })) return;
     try {
       await api.patch(`/users/${u.id}/toggle-active`);
       reload();
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     }
   };
 

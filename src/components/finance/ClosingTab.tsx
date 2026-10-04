@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Loader2, Lock, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { getErrorMessage } from '../../lib/errors';
+import { confirm, notifyError } from '../../lib/dialogs';
 import { formatDay, formatMoney, todayISO } from '../../lib/format';
 import { unwrap } from '../../lib/unwrap';
 import { ClosingBreakdown } from './ClosingBreakdown';
@@ -39,9 +40,15 @@ export function ClosingTab({ onClosed }: { onClosed: () => void }) {
 
   const closeDay = async () => {
     if (!preview) return;
-    const ok = window.confirm(
-      `¿Cerrar el día ${formatDay(date)}?\n\nVentas: ${formatMoney(preview.totalSales)}\nUtilidad neta: ${formatMoney(preview.netProfit)}\n\nLas ventas de ese día quedarán ligadas a este corte.`,
-    );
+    const ok = await confirm({
+      title: `¿Cerrar el día ${formatDay(date)}?`,
+      message: 'Las ventas de ese día quedarán ligadas a este corte.',
+      details: [
+        { label: 'Ventas', value: formatMoney(preview.totalSales) },
+        { label: 'Utilidad neta', value: formatMoney(preview.netProfit) },
+      ],
+      confirmLabel: 'Cerrar día',
+    });
     if (!ok) return;
     setSubmitting(true);
     try {
@@ -50,7 +57,7 @@ export function ClosingTab({ onClosed }: { onClosed: () => void }) {
       refresh();
       onClosed();
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     } finally {
       setSubmitting(false);
     }

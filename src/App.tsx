@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { SideNavBar } from './components/layout/SideNavBar';
 import { BottomNav, MobileTopBar } from './components/layout/MobileNav';
 import { ThemePicker } from './components/ui/ThemePicker';
+import { DialogHost } from './components/ui/DialogHost';
 import { InventoryPage } from './pages/InventoryPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { PosPage } from './pages/PosPage';
@@ -25,6 +26,7 @@ function App() {
       <>
         <LoginPage onOpenThemes={openThemes} />
         {themePicker}
+        <DialogHost />
       </>
     );
   }
@@ -51,6 +53,7 @@ function App() {
       </div>
 
       {themePicker}
+      <DialogHost />
     </div>
   )
 }

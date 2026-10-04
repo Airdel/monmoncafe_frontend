@@ -3,6 +3,7 @@ import { Check, CheckCircle2, ListChecks, Loader2, Minus, Pencil, Plus, RotateCc
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { getErrorMessage } from '../lib/errors';
+import { confirm, notifyError } from '../lib/dialogs';
 import { formatMoney } from '../lib/format';
 import { unitLabel } from '../lib/modifiers';
 import { matchesSearch } from '../lib/search';
@@ -95,19 +96,23 @@ export function ShoppingListPage() {
       setList(unwrap<ShoppingList>(await api.post('/shopping-lists', { budget })));
       setShowNewList(false);
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     } finally {
       setCreating(false);
     }
   };
 
   const closeList = async () => {
-    if (!list || !window.confirm('¿Terminar esta lista? Ya no aparecerá aquí.')) return;
+    if (!list || !await confirm({
+      title: '¿Terminar esta lista?',
+      message: 'Ya no aparecerá aquí.',
+      confirmLabel: 'Terminar lista',
+    })) return;
     try {
       await api.post(`/shopping-lists/${list.id}/close`);
       setList(null);
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     }
   };
 
@@ -120,7 +125,7 @@ export function ShoppingListPage() {
       await api.patch(`/shopping-lists/items/${item.id}`, changes);
     } catch (err) {
       setList(l => l && { ...l, items: l.items.map(i => i.id === item.id ? item : i) });
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     }
   };
 
@@ -304,7 +309,7 @@ function PrioritiesTab({ canManage }: { canManage: boolean }) {
   useEffect(() => {
     api.get('/inventory/ingredients')
       .then(res => setIngredients(unwrap<Ingredient[]>(res)))
-      .catch(err => alert('Error: ' + getErrorMessage(err)))
+      .catch(err => notifyError(err))
       .finally(() => setLoading(false));
   }, []);
 
@@ -314,7 +319,7 @@ function PrioritiesTab({ canManage }: { canManage: boolean }) {
       await api.patch(`/inventory/ingredients/${ingredient.id}`, { priority });
     } catch (err) {
       setIngredients(list => list.map(i => i.id === ingredient.id ? ingredient : i));
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     }
   };
 
