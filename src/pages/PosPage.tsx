@@ -7,6 +7,7 @@ import { getErrorMessage } from '../lib/errors';
 import { unwrap } from '../lib/unwrap';
 import { formatDelta, type ModifierGroup, type ModifierOption } from '../lib/modifiers';
 import { Modal } from '../components/ui/Modal';
+import { productImageSrc } from '../lib/images';
 import * as motion from 'motion/react-client';
 
 interface Category {
@@ -21,6 +22,8 @@ interface Product {
   name: string;
   sellingPrice: string;
   categoryId: number;
+  isActive: boolean;
+  imageUrl?: string | null;
   modifierGroups?: { groupId: number }[];
 }
 
@@ -68,7 +71,8 @@ export function PosPage() {
       // Deduplicate categories in case seed was run multiple times
       const uniqueCats = Array.from(new Map(catList.map(item => [item.name, item])).values());
       setCategories(uniqueCats);
-      setProducts(prodRes.data.data || prodRes.data);
+      // Products switched off in Recetas are no longer sold
+      setProducts(unwrap<Product[]>(prodRes).filter(p => p.isActive));
     }).catch(err => {
       console.error(err);
     }).finally(() => setLoading(false));
@@ -211,9 +215,18 @@ export function PosPage() {
               className="glass-panel group text-left border-ink/5 hover:border-primary/50 transition-colors flex flex-col overflow-hidden relative"
             >
               <div className="h-24 sm:h-32 lg:h-36 w-full shrink-0 overflow-hidden bg-primary/5">
-                <div className="w-full h-full flex items-center justify-center text-primary/30 group-hover:scale-110 transition-all duration-500">
-                  <span className="font-headline font-bold text-3xl sm:text-4xl tracking-tighter">{product.name.substring(0, 2).toUpperCase()}</span>
-                </div>
+                {product.imageUrl ? (
+                  <img
+                    src={productImageSrc(product.imageUrl) ?? undefined}
+                    alt=""
+                    loading="lazy"
+                    className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-primary/30 group-hover:scale-110 transition-all duration-500">
+                    <span className="font-headline font-bold text-3xl sm:text-4xl tracking-tighter">{product.name.substring(0, 2).toUpperCase()}</span>
+                  </div>
+                )}
               </div>
 
               <div className="p-3 sm:p-4 flex-1 flex flex-col justify-between gap-1">
@@ -259,7 +272,9 @@ export function PosPage() {
             cart.map((item) => (
               <div key={item.key} className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl bg-primary/10 overflow-hidden shrink-0 flex items-center justify-center">
-                   <span className="font-headline font-bold text-primary/60">{item.product.name.substring(0, 2).toUpperCase()}</span>
+                  {item.product.imageUrl
+                    ? <img src={productImageSrc(item.product.imageUrl) ?? undefined} alt="" className="w-full h-full object-cover" />
+                    : <span className="font-headline font-bold text-primary/60">{item.product.name.substring(0, 2).toUpperCase()}</span>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-start gap-2">
