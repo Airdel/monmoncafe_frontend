@@ -1,14 +1,19 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, ChevronLeft, ChevronRight, Plus, Send, X, Save, Trash2, ArrowUpDown, Layers, Store, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, ChevronLeft, ChevronRight, Plus, Send, X, Save, Trash2, ArrowUpDown, Layers, Store, Pencil, EyeOff, Power, type LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
+import { unwrap } from '../lib/unwrap';
 import { notifyError } from '../lib/dialogs';
 import { useAuthStore } from '../store/auth';
 import { Modal } from '../components/ui/Modal';
 import { ModifiersTab } from '../components/inventory/ModifiersTab';
 import { SuppliersTab } from '../components/inventory/SuppliersTab';
+import { ProductEditModal, type EditableProduct } from '../components/inventory/ProductEditModal';
+import { productImageSrc } from '../lib/images';
+import { ChangeUnitModal, DeleteIngredientModal, IngredientFormModal, type ManagedIngredient } from '../components/inventory/IngredientDialogs';
 import { SearchInput } from '../components/ui/SearchInput';
 import { cn } from '../lib/cn';
 import { matchesSearch } from '../lib/search';
+import { unitLabel } from '../lib/modifiers';
 import * as motion from 'motion/react-client';
 
 interface Ingredient {
@@ -17,16 +22,29 @@ interface Ingredient {
   unit: string;
   currentStock: string;
   minStock: string;
+  maxStock?: string | null;
   currentCostPerUnit: string;
   avgCostPerUnit: string;
+  priority?: ManagedIngredient['priority'];
+  isActive?: boolean;
   supplierId?: number | null;
   supplier?: { name: string } | null;
 }
+
+/** Fill of the stock bar: the maximum, or three times the minimum without one. */
+const stockPercent = (i: Ingredient) => {
+  const full = Number(i.maxStock) || Number(i.minStock) * 3;
+  return full > 0 ? Math.min((Number(i.currentStock) / full) * 100, 100) : 100;
+};
+const isLowStock = (i: Ingredient) => i.isActive !== false && Number(i.currentStock) <= Number(i.minStock);
 
 interface Product {
   id: number;
   name: string;
   sellingPrice: string;
+  categoryId: number;
+  isActive: boolean;
+  imageUrl?: string | null;
   category?: { name: string };
 }
 
@@ -75,12 +93,22 @@ export function InventoryPage() {
   const [editRecipeRows, setEditRecipeRows] = useState<{ ingredientId: number; quantityUsed: string }[]>([]);
   const [recipeSaving, setRecipeSaving] = useState(false);
 
+  // Name, POS category, visibility and photo
+  const [editingProduct, setEditingProduct] = useState(false);
+
   // Adjustment modal
   const [adjustModal, setAdjustModal] = useState<Ingredient | null>(null);
   const [adjustType, setAdjustType] = useState<'IN' | 'OUT' | 'ADJUSTMENT'>('ADJUSTMENT');
   const [adjustQty, setAdjustQty] = useState('');
   const [adjustReason, setAdjustReason] = useState('');
   const [adjustSubmitting, setAdjustSubmitting] = useState(false);
+
+  // Insumo CRUD (create/edit, unit change, delete) and deactivated ones
+  const [ingredientForm, setIngredientForm] = useState<Ingredient | 'new' | null>(null);
+  const [unitModal, setUnitModal] = useState<Ingredient | null>(null);
+  const [deleteModal, setDeleteModal] = useState<Ingredient | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
+  const [inactiveIngredients, setInactiveIngredients] = useState<Ingredient[]>([]);
 
   // Purchase form
   const [purchaseForm, setPurchaseForm] = useState({ ingredientId: 0, supplierId: 0, quantity: '', totalCost: '', notes: '' });
@@ -101,6 +129,31 @@ export function InventoryPage() {
 
   useEffect(() => { loadAll(); }, []);
 
+  const loadInactive = () =>
+    api.get('/inventory/ingredients', { params: { includeInactive: true } })
+      .then(res => setInactiveIngredients(unwrap<Ingredient[]>(res).filter(i => i.isActive === false)))
+      .catch(err => console.error(err));
+
+  const toggleInactive = (show: boolean) => {
+    setShowInactive(show);
+    if (show) loadInactive();
+  };
+
+  const afterIngredientChange = () => {
+    setIngredientForm(null); setUnitModal(null); setDeleteModal(null);
+    loadAll();
+    if (showInactive) loadInactive();
+  };
+
+  const reactivate = async (item: Ingredient) => {
+    try {
+      await api.patch(`/inventory/ingredients/${item.id}`, { isActive: true });
+      afterIngredientChange();
+    } catch (err) {
+      notifyError(err);
+    }
+  };
+
   // Load recipe when product selected
   useEffect(() => {
     if (!selectedProductId) return;
@@ -114,8 +167,9 @@ export function InventoryPage() {
       .finally(() => setRecipeLoading(false));
   }, [selectedProductId]);
 
-  const filteredIngredients = ingredients.filter(i =>
-    (stockFilter === 'all' || Number(i.currentStock) <= Number(i.minStock)) &&
+  const stockIngredients = showInactive && stockFilter === 'all' ? [...ingredients, ...inactiveIngredients] : ingredients;
+  const filteredIngredients = stockIngredients.filter(i =>
+    (stockFilter === 'all' || isLowStock(i)) &&
     matchesSearch(stockSearch, i.name, i.supplier?.name)
   );
   const emptyStockMessage = stockSearch
@@ -128,10 +182,11 @@ export function InventoryPage() {
     setSelectedProductId(id);
     setRecipeLoading(!!id);
     setEditingRecipe(false);
+    setEditingProduct(false);
     if (!id) { setRecipe([]); setSelectedProduct(null); }
   };
 
-  const lowStockCount = ingredients.filter(i => Number(i.currentStock) <= Number(i.minStock)).length;
+  const lowStockCount = ingredients.filter(isLowStock).length;
 
   // Recipe cost calculation
   const recipeCost = recipe.reduce((sum, r) => sum + (Number(r.quantityUsed) * Number(r.ingredient.currentCostPerUnit)), 0);
@@ -182,6 +237,12 @@ export function InventoryPage() {
     } finally {
       setAdjustSubmitting(false);
     }
+  };
+
+  const productSaved = (saved: EditableProduct) => {
+    setProducts(prev => prev.map(p => p.id === saved.id ? { ...p, ...saved } : p));
+    setSelectedProduct(prev => prev && prev.id === saved.id ? { ...prev, ...saved } : prev);
+    setEditingProduct(false);
   };
 
   // Recipe editing helpers
@@ -274,6 +335,17 @@ export function InventoryPage() {
             </button>
           </div>
           <SearchInput value={stockSearch} onChange={setStockSearch} placeholder="Buscar insumo o proveedor" className="w-full sm:max-w-xs" />
+          {canManage && (
+            <>
+              <label className="flex items-center gap-2 text-ink/60 text-sm cursor-pointer select-none">
+                <input type="checkbox" checked={showInactive} onChange={e => toggleInactive(e.target.checked)} className="accent-primary" />
+                Mostrar desactivados
+              </label>
+              <button onClick={() => setIngredientForm('new')} className="sm:ml-auto px-5 py-2.5 rounded-xl bg-primary/20 border border-primary/40 text-primary font-semibold hover:bg-primary/30 transition-all flex items-center justify-center gap-2">
+                <Plus className="w-5 h-5" /> Nuevo insumo
+              </button>
+            </>
+          )}
           </div>
 
           {/* Stock cards (phones and portrait tablets) */}
@@ -288,18 +360,20 @@ export function InventoryPage() {
                 {emptyStockMessage}
               </div>
             ) : filteredIngredients.map(item => {
-              const isLow = Number(item.currentStock) <= Number(item.minStock);
-              const stockPct = Number(item.minStock) > 0 ? (Number(item.currentStock) / (Number(item.minStock) * 3)) * 100 : 100;
+              const isLow = isLowStock(item);
+              const stockPct = stockPercent(item);
+              const inactive = item.isActive === false;
+              const isNegative = Number(item.currentStock) < 0;
               return (
-                <div key={item.id} className={`glass-panel p-4 ${isLow ? 'border-l-4 border-l-error' : ''}`}>
+                <div key={item.id} className={`glass-panel p-4 ${isLow ? 'border-l-4 border-l-error' : ''} ${inactive ? 'opacity-50' : ''}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-medium text-ink truncate">{item.name}</p>
+                      <p className="font-medium text-ink truncate">{item.name}{inactive && <span className="text-ink/40 font-normal"> · desactivado</span>}</p>
                       <p className="text-ink/50 text-xs truncate">{item.supplier?.name || 'Sin proveedor'}</p>
                     </div>
                     {isLow ? (
                       <span className="flex items-center gap-1 text-error text-xs font-label font-bold uppercase shrink-0">
-                        <AlertTriangle className="w-4 h-4" /> Bajo
+                        <AlertTriangle className="w-4 h-4" /> {isNegative ? 'Negativo' : 'Bajo'}
                       </span>
                     ) : (
                       <CheckCircle2 className="w-5 h-5 text-secondary shrink-0" />
@@ -308,22 +382,34 @@ export function InventoryPage() {
                   <div className="flex items-end justify-between gap-3 mt-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm">
-                        <span className="font-mono text-ink/80">{Number(item.currentStock).toLocaleString()}</span>
-                        <span className="text-ink/40 text-xs"> {item.unit.toLowerCase()} · mín. {Number(item.minStock).toLocaleString()}</span>
+                        <span className={`font-mono ${isNegative ? 'text-error font-bold' : 'text-ink/80'}`}>{Number(item.currentStock).toLocaleString()}</span>
+                        <span className="text-ink/40 text-xs"> {unitLabel(item.unit)} · mín. {Number(item.minStock).toLocaleString()}{item.maxStock != null && ` · máx. ${Number(item.maxStock).toLocaleString()}`}</span>
                       </p>
                       <div className="w-full max-w-[10rem] h-1.5 bg-ink/10 rounded-full mt-1.5 overflow-hidden">
-                        <div className={`h-full rounded-full ${isLow ? 'bg-error' : 'bg-secondary'}`} style={{ width: `${Math.min(stockPct, 100)}%` }}></div>
+                        <div className={`h-full rounded-full ${isLow ? 'bg-error' : 'bg-secondary'}`} style={{ width: `${stockPct}%` }}></div>
                       </div>
-                      <p className="font-mono text-secondary text-xs mt-1.5">${Number(item.currentCostPerUnit).toFixed(4)} / {item.unit.toLowerCase()}</p>
+                      <p className="font-mono text-secondary text-xs mt-1.5">${Number(item.currentCostPerUnit).toFixed(4)} / {unitLabel(item.unit)}</p>
                     </div>
-                    {canManage && (
+                    {canManage && (inactive ? (
+                      <button onClick={() => reactivate(item)} className="px-4 py-2.5 rounded-xl bg-secondary/10 border border-secondary/30 text-secondary text-xs font-label uppercase tracking-wider flex items-center gap-1 shrink-0">
+                        <Power className="w-3.5 h-3.5" /> Reactivar
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => setIngredientForm(item)} className="p-2.5 rounded-xl text-ink/50 hover:text-ink hover:bg-ink/5" aria-label={`Editar ${item.name}`}>
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => setDeleteModal(item)} className="p-2.5 rounded-xl text-error/70 hover:text-error hover:bg-error/10" aria-label={`Eliminar ${item.name}`}>
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => { setAdjustModal(item); setAdjustType('ADJUSTMENT'); setAdjustQty(''); setAdjustReason(''); }}
                         className="px-4 py-2.5 rounded-xl bg-ink/5 border border-ink/10 text-ink/70 hover:text-primary hover:border-primary/30 transition-all text-xs font-label uppercase tracking-wider flex items-center gap-1 shrink-0"
                       >
                         <ArrowUpDown className="w-3.5 h-3.5" /> Ajustar
                       </button>
-                    )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               );
@@ -338,10 +424,10 @@ export function InventoryPage() {
                   <th className="py-4 px-6 font-medium">Ingrediente</th>
                   <th className="py-4 px-6 font-medium">Proveedor</th>
                   <th className="py-4 px-6 font-medium">Stock Actual</th>
-                  <th className="py-4 px-6 font-medium">Mínimo</th>
+                  <th className="py-4 px-6 font-medium">Mín. / Máx.</th>
                   <th className="py-4 px-6 font-medium">Costo Unit.</th>
                   <th className="py-4 px-6 font-medium text-center">Estado</th>
-                  {canManage && <th className="py-4 px-6 font-medium text-center">Ajustar</th>}
+                  {canManage && <th className="py-4 px-6 font-medium text-center">Acciones</th>}
                 </tr>
               </thead>
               <tbody className="font-body text-sm">
@@ -359,45 +445,61 @@ export function InventoryPage() {
                     </td>
                   </tr>
                 ) : filteredIngredients.map((item, idx) => {
-                  const isLow = Number(item.currentStock) <= Number(item.minStock);
-                  const stockPct = Number(item.minStock) > 0 ? (Number(item.currentStock) / (Number(item.minStock) * 3)) * 100 : 100;
+                  const isLow = isLowStock(item);
+                  const stockPct = stockPercent(item);
+                  const inactive = item.isActive === false;
+                  const isNegative = Number(item.currentStock) < 0;
                   return (
                     <motion.tr 
                       key={item.id}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: idx * 0.03 }}
-                      className="border-b border-ink/5 hover:bg-ink/[0.02] transition-colors group"
+                      className={`border-b border-ink/5 hover:bg-ink/[0.02] transition-colors group ${inactive ? 'opacity-50' : ''}`}
                     >
-                      <td className="py-4 px-6 text-ink group-hover:text-primary transition-colors font-medium">{item.name}</td>
+                      <td className="py-4 px-6 text-ink group-hover:text-primary transition-colors font-medium">{item.name}{inactive && <span className="text-ink/40 font-normal"> · desactivado</span>}</td>
                       <td className="py-4 px-6 text-ink/50">{item.supplier?.name || '—'}</td>
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-3">
-                          <span className="font-mono text-ink/80">{Number(item.currentStock).toLocaleString()}</span>
-                          <span className="text-ink/30 text-xs">{item.unit.toLowerCase()}</span>
+                          <span className={`font-mono ${isNegative ? 'text-error font-bold' : 'text-ink/80'}`}>{Number(item.currentStock).toLocaleString()}</span>
+                          <span className="text-ink/30 text-xs">{unitLabel(item.unit)}</span>
                         </div>
                         <div className="w-20 h-1 bg-ink/10 rounded-full mt-1 overflow-hidden">
-                          <div className={`h-full rounded-full ${isLow ? 'bg-error' : 'bg-secondary'}`} style={{ width: `${Math.min(stockPct, 100)}%` }}></div>
+                          <div className={`h-full rounded-full ${isLow ? 'bg-error' : 'bg-secondary'}`} style={{ width: `${stockPct}%` }}></div>
                         </div>
                       </td>
-                      <td className="py-4 px-6 font-mono text-ink/40">{Number(item.minStock).toLocaleString()}</td>
+                      <td className="py-4 px-6 font-mono text-ink/40">{Number(item.minStock).toLocaleString()} / {item.maxStock != null ? Number(item.maxStock).toLocaleString() : '—'}</td>
                       <td className="py-4 px-6 font-mono text-secondary">${Number(item.currentCostPerUnit).toFixed(4)}</td>
                       <td className="py-4 px-6 flex justify-center">
                         {isLow ? (
                           <span className="flex items-center gap-1 text-error text-xs font-label font-bold uppercase">
-                            <AlertTriangle className="w-4 h-4" /> Bajo
+                            <AlertTriangle className="w-4 h-4" /> {isNegative ? 'Negativo' : 'Bajo'}
                           </span>
                         ) : (
                           <CheckCircle2 className="w-5 h-5 text-secondary" />
                         )}
                       </td>
-                      {canManage && <td className="py-4 px-6 text-center">
-                        <button
-                          onClick={() => { setAdjustModal(item); setAdjustType('ADJUSTMENT'); setAdjustQty(''); setAdjustReason(''); }}
-                          className="px-3 py-1.5 rounded-lg bg-ink/5 border border-ink/10 text-ink/60 hover:text-primary hover:border-primary/30 transition-all text-xs font-label uppercase tracking-wider flex items-center gap-1 mx-auto"
-                        >
-                          <ArrowUpDown className="w-3 h-3" /> Ajustar
-                        </button>
+                      {canManage && <td className="py-4 px-6">
+                        {inactive ? (
+                          <button onClick={() => reactivate(item)} className="px-3 py-1.5 rounded-lg bg-secondary/10 border border-secondary/30 text-secondary text-xs font-label uppercase tracking-wider flex items-center gap-1 mx-auto">
+                            <Power className="w-3 h-3" /> Reactivar
+                          </button>
+                        ) : (
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => { setAdjustModal(item); setAdjustType('ADJUSTMENT'); setAdjustQty(''); setAdjustReason(''); }}
+                              className="px-3 py-1.5 rounded-lg bg-ink/5 border border-ink/10 text-ink/60 hover:text-primary hover:border-primary/30 transition-all text-xs font-label uppercase tracking-wider flex items-center gap-1"
+                            >
+                              <ArrowUpDown className="w-3 h-3" /> Ajustar
+                            </button>
+                            <button onClick={() => setIngredientForm(item)} className="p-1.5 rounded-lg text-ink/50 hover:text-ink hover:bg-ink/5" aria-label={`Editar ${item.name}`} title="Editar">
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => setDeleteModal(item)} className="p-1.5 rounded-lg text-error/70 hover:text-error hover:bg-error/10" aria-label={`Eliminar ${item.name}`} title="Eliminar">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                       </td>}
                     </motion.tr>
                   );
@@ -428,9 +530,16 @@ export function InventoryPage() {
                     selectedProductId === p.id ? 'bg-primary/10 border-primary/20 text-primary' : 'text-ink/80 hover:bg-ink/5'
                   )}
                 >
-                  <span className="flex-1 min-w-0">
+                  <span className="w-9 h-9 rounded-lg overflow-hidden bg-primary/10 shrink-0 flex items-center justify-center">
+                    {p.imageUrl
+                      ? <img src={productImageSrc(p.imageUrl) ?? undefined} alt="" loading="lazy" className="w-full h-full object-cover" />
+                      : <span className="font-headline font-bold text-xs text-primary/50">{p.name.substring(0, 2).toUpperCase()}</span>}
+                  </span>
+                  <span className={cn('flex-1 min-w-0', !p.isActive && 'opacity-50')}>
                     <span className="block font-medium truncate">{p.name}</span>
-                    {p.category && <span className="block text-xs text-ink/40 truncate">{p.category.name}</span>}
+                    <span className="block text-xs text-ink/40 truncate">
+                      {p.category?.name}{!p.isActive && ' · oculto en POS'}
+                    </span>
                   </span>
                   <ChevronRight className="w-4 h-4 text-ink/30 shrink-0" />
                 </button>
@@ -460,6 +569,11 @@ export function InventoryPage() {
                       <div>
                         <h3 className="font-headline text-xl font-bold text-ink">{selectedProduct.name}</h3>
                         <p className="text-ink/40 text-xs mt-1">{selectedProduct.category?.name} · {selectedProduct.size || 'Estándar'}</p>
+                        {selectedProduct.isActive === false && (
+                          <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded bg-error/15 text-error text-[10px] font-label uppercase tracking-widest">
+                            <EyeOff className="w-3 h-3" /> Oculto en POS
+                          </span>
+                        )}
                       </div>
                       <span className="px-2 py-1 bg-primary/20 text-primary text-[10px] font-label tracking-widest uppercase rounded">{recipe.length} items</span>
                     </div>
@@ -486,9 +600,14 @@ export function InventoryPage() {
                         </button>
                       </div>
                     ) : canManage && (
-                      <button onClick={startEditRecipe} className="w-full py-2.5 rounded-xl bg-ink/5 border border-ink/10 text-ink/70 hover:text-primary hover:border-primary/30 text-sm font-medium flex items-center justify-center gap-2 transition-all">
-                        <SlidersHorizontal className="w-4 h-4" /> Editar Receta
-                      </button>
+                      <div className="flex gap-2">
+                        <button onClick={() => setEditingProduct(true)} className="flex-1 py-2.5 rounded-xl bg-ink/5 border border-ink/10 text-ink/70 hover:text-primary hover:border-primary/30 text-sm font-medium flex items-center justify-center gap-2 transition-all">
+                          <Pencil className="w-4 h-4" /> Editar producto
+                        </button>
+                        <button onClick={startEditRecipe} className="flex-1 py-2.5 rounded-xl bg-ink/5 border border-ink/10 text-ink/70 hover:text-primary hover:border-primary/30 text-sm font-medium flex items-center justify-center gap-2 transition-all">
+                          <SlidersHorizontal className="w-4 h-4" /> Editar Receta
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -564,6 +683,10 @@ export function InventoryPage() {
           )}
 
         </div>
+      )}
+
+      {editingProduct && selectedProduct && (
+        <ProductEditModal product={selectedProduct} onClose={() => setEditingProduct(false)} onSaved={productSaved} />
       )}
 
       {/* ═══ TAB: MODIFIERS ═══ */}
@@ -706,7 +829,7 @@ export function InventoryPage() {
               </thead>
               <tbody className="text-sm">
                 {ingredients.map(item => {
-                  const isLow = Number(item.currentStock) <= Number(item.minStock);
+                  const isLow = isLowStock(item);
                   return (
                     <tr key={item.id} className={`border-b border-ink/5 ${isLow ? 'bg-error/5' : ''}`}>
                       <td className="py-2 px-4 text-ink text-xs">{item.name}</td>
@@ -762,6 +885,19 @@ export function InventoryPage() {
           </div>
         </Modal>
       )}
+
+      {/* ═══ INSUMO CRUD MODALS ═══ */}
+      {ingredientForm && (
+        <IngredientFormModal
+          ingredient={ingredientForm === 'new' ? null : ingredientForm}
+          suppliers={suppliers}
+          onClose={() => setIngredientForm(null)}
+          onSaved={afterIngredientChange}
+          onChangeUnit={item => { setIngredientForm(null); setUnitModal(item as Ingredient); }}
+        />
+      )}
+      {unitModal && <ChangeUnitModal ingredient={unitModal} onClose={() => setUnitModal(null)} onSaved={afterIngredientChange} />}
+      {deleteModal && <DeleteIngredientModal ingredient={deleteModal} onClose={() => setDeleteModal(null)} onDone={afterIngredientChange} />}
     </div>
   );
 }

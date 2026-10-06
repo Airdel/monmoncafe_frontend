@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Minus, Plus, Banknote, ArrowLeftRight, Zap, Loader2, ShoppingBag, ChevronDown, Clock } from 'lucide-react';
+import { Minus, Plus, Banknote, ArrowLeftRight, Zap, Loader2, ShoppingBag, ChevronDown, Clock, AlertTriangle } from 'lucide-react';
 import { cn } from '../lib/cn';
 import { api } from '../lib/api';
 import { formatMoney } from '../lib/format';
 import { notifyError, toast } from '../lib/dialogs';
 import { unwrap } from '../lib/unwrap';
-import { formatDelta, type ModifierGroup, type ModifierOption } from '../lib/modifiers';
+import { formatDelta, unitLabel, type ModifierGroup, type ModifierOption } from '../lib/modifiers';
 import { Modal } from '../components/ui/Modal';
+import { productImageSrc } from '../lib/images';
 import * as motion from 'motion/react-client';
 
 interface Category {
@@ -21,6 +22,8 @@ interface Product {
   name: string;
   sellingPrice: string;
   categoryId: number;
+  isActive: boolean;
+  imageUrl?: string | null;
   modifierGroups?: { groupId: number }[];
 }
 
@@ -34,6 +37,29 @@ interface CartLine {
 
 const lineKey = (productId: number, options: ModifierOption[]) =>
   [productId, ...options.map(o => o.id).sort((a, b) => a - b)].join('-');
+
+/** An ingredient the order leaves with negative stock. */
+interface StockWarning {
+  ingredientId: number;
+  name: string;
+  unit: string;
+  needed: number;
+  available: number;
+  after: number;
+}
+
+const saleItems = (cart: CartLine[]) => cart.map(item => ({
+  productId: item.product.id,
+  quantity: item.quantity,
+  ...(item.options.length > 0 && { modifierOptionIds: item.options.map(o => o.id) }),
+}));
+
+const formatQty = (qty: number, unit: string) =>
+  `${qty.toLocaleString('es-MX', { maximumFractionDigits: 2 })} ${unitLabel(unit)}`;
+
+/** "Café (faltan 8 g)" for each ingredient the order runs out of. */
+const describeShortages = (warnings: StockWarning[]) =>
+  warnings.map(w => `${w.name} (faltan ${formatQty(-w.after, w.unit)})`).join(', ');
 
 const unitPrice = (line: Pick<CartLine, 'product' | 'options'>) =>
   Number(line.product.sellingPrice) + line.options.reduce((sum, o) => sum + Number(o.priceDelta), 0);
@@ -56,6 +82,9 @@ export function PosPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   // Phones show the order as a bottom sheet
   const [orderOpen, setOrderOpen] = useState(false);
+  // Ingredients the current cart would leave below zero, tagged with the cart they belong to
+  const [stockCheck, setStockCheck] = useState<{ cartKey: string; warnings: StockWarning[] } | null>(null);
+  const cartKey = cart.map(item => `${item.key}x${item.quantity}`).join(',');
 
   useEffect(() => {
     Promise.all([
@@ -68,11 +97,25 @@ export function PosPage() {
       // Deduplicate categories in case seed was run multiple times
       const uniqueCats = Array.from(new Map(catList.map(item => [item.name, item])).values());
       setCategories(uniqueCats);
-      setProducts(prodRes.data.data || prodRes.data);
+      // Products switched off in Recetas are no longer sold
+      setProducts(unwrap<Product[]>(prodRes).filter(p => p.isActive));
     }).catch(err => {
       console.error(err);
     }).finally(() => setLoading(false));
   }, []);
+
+  // Missing stock never blocks a sale, but the cashier should know before charging
+  useEffect(() => {
+    if (cart.length === 0) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      api.post('/sales/stock-check', { items: saleItems(cart) })
+        .then(res => { if (!cancelled) setStockCheck({ cartKey, warnings: unwrap<StockWarning[]>(res) }); })
+        .catch(() => { /* only a warning: if it fails, selling still works */ });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [cart, cartKey]);
+  const stockWarnings = cart.length > 0 && stockCheck?.cartKey === cartKey ? stockCheck.warnings : [];
 
   const addToCart = (product: Product, options: ModifierOption[] = []) => {
     const key = lineKey(product.id, options);
@@ -133,19 +176,18 @@ export function PosPage() {
     if (cart.length === 0) return;
     setIsProcessing(true);
     try {
-      const sale = unwrap<{ id: number }>(await api.post('/sales', {
-        items: cart.map(item => ({
-          productId: item.product.id,
-          quantity: item.quantity,
-          ...(item.options.length > 0 && { modifierOptionIds: item.options.map(o => o.id) }),
-        })),
+      const sale = unwrap<{ id: number; stockWarnings?: StockWarning[] }>(await api.post('/sales', {
+        items: saleItems(cart),
         paymentMethod,
         customerName: customerName.trim() || undefined,
         notes: orderNote.trim() || undefined,
         ...(payLater && { payLater: true }),
       }));
-      if (payLater) toast.info(`Se cobra después desde Comandas. Comanda #${sale.id}`, 'Pedido enviado a comandas');
-      else toast.success(`Comanda #${sale.id}`, '¡Venta registrada!');
+      const shortages = sale.stockWarnings?.length
+        ? ` Ojo: el inventario quedó en negativo en ${describeShortages(sale.stockWarnings)}.`
+        : '';
+      if (payLater) toast.info(`Se cobra después desde Comandas. Comanda #${sale.id}.${shortages}`, 'Pedido enviado a comandas');
+      else toast.success(`Comanda #${sale.id}.${shortages}`, '¡Venta registrada!');
       setCart([]);
       setCustomerName('');
       setOrderNote('');
@@ -209,9 +251,18 @@ export function PosPage() {
               className="glass-panel group text-left border-ink/5 hover:border-primary/50 transition-colors flex flex-col overflow-hidden relative"
             >
               <div className="h-24 sm:h-32 lg:h-36 w-full shrink-0 overflow-hidden bg-primary/5">
-                <div className="w-full h-full flex items-center justify-center text-primary/30 group-hover:scale-110 transition-all duration-500">
-                  <span className="font-headline font-bold text-3xl sm:text-4xl tracking-tighter">{product.name.substring(0, 2).toUpperCase()}</span>
-                </div>
+                {product.imageUrl ? (
+                  <img
+                    src={productImageSrc(product.imageUrl) ?? undefined}
+                    alt=""
+                    loading="lazy"
+                    className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-primary/30 group-hover:scale-110 transition-all duration-500">
+                    <span className="font-headline font-bold text-3xl sm:text-4xl tracking-tighter">{product.name.substring(0, 2).toUpperCase()}</span>
+                  </div>
+                )}
               </div>
 
               <div className="p-3 sm:p-4 flex-1 flex flex-col justify-between gap-1">
@@ -257,7 +308,9 @@ export function PosPage() {
             cart.map((item) => (
               <div key={item.key} className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl bg-primary/10 overflow-hidden shrink-0 flex items-center justify-center">
-                   <span className="font-headline font-bold text-primary/60">{item.product.name.substring(0, 2).toUpperCase()}</span>
+                  {item.product.imageUrl
+                    ? <img src={productImageSrc(item.product.imageUrl) ?? undefined} alt="" className="w-full h-full object-cover" />
+                    : <span className="font-headline font-bold text-primary/60">{item.product.name.substring(0, 2).toUpperCase()}</span>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-start gap-2">
@@ -303,6 +356,15 @@ export function PosPage() {
             </div>
             <span className="font-headline text-3xl xl:text-4xl font-bold text-secondary">{formatMoney(total)}</span>
           </div>
+
+          {stockWarnings.length > 0 && (
+            <div role="status" className="mb-3 p-3 rounded-xl border border-warning/40 bg-warning/10 text-sm flex gap-2">
+              <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+              <p className="text-ink/80">
+                <b className="text-warning">No alcanza el inventario:</b> {describeShortages(stockWarnings)}. Puedes cobrar igual; quedará en negativo.
+              </p>
+            </div>
+          )}
 
           {/* Who it's for and special requests, shown on the comanda */}
           <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-2 mb-3">
