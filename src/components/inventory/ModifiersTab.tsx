@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Loader2, Pencil, Plus, Power, Save, Trash2, Layers } from 'lucide-react';
 import { api } from '../../lib/api';
 import { unwrap } from '../../lib/unwrap';
-import { getErrorMessage } from '../../lib/errors';
+import { confirm, notifyError } from '../../lib/dialogs';
 import { formatDelta, unitLabel, type ModifierGroup, type ModifierOption } from '../../lib/modifiers';
 import { Modal } from '../ui/Modal';
 
@@ -41,7 +41,7 @@ export function ModifiersTab({ ingredients, products, canManage }: { ingredients
       after?.();
       await load();
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     } finally {
       setSaving(false);
     }
@@ -115,9 +115,16 @@ export function ModifiersTab({ ingredients, products, canManage }: { ingredients
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={() => group.isActive
-                        ? confirm(`¿Desactivar “${group.name}”? Dejará de aparecer en el POS.`) && run(() => api.delete(`/modifiers/groups/${group.id}`))
-                        : run(() => api.put(`/modifiers/groups/${group.id}`, { isActive: true }))}
+                      onClick={async () => {
+                        if (!group.isActive) return run(() => api.put(`/modifiers/groups/${group.id}`, { isActive: true }));
+                        const ok = await confirm({
+                          title: `¿Desactivar “${group.name}”?`,
+                          message: 'Dejará de aparecer en el POS.',
+                          confirmLabel: 'Desactivar',
+                          tone: 'danger',
+                        });
+                        if (ok) run(() => api.delete(`/modifiers/groups/${group.id}`));
+                      }}
                       disabled={saving}
                       className={ghostButton}
                       aria-label={group.isActive ? `Desactivar ${group.name}` : `Reactivar ${group.name}`}

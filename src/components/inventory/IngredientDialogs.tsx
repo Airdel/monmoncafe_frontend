@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowRight, Loader2, Power, Ruler, Save, Trash2 } from '
 import { api } from '../../lib/api';
 import { unwrap } from '../../lib/unwrap';
 import { getErrorMessage } from '../../lib/errors';
+import { notifyError } from '../../lib/dialogs';
 import { formatMoney } from '../../lib/format';
 import { unitLabel } from '../../lib/modifiers';
 import { Modal } from '../ui/Modal';
@@ -109,7 +110,7 @@ export function IngredientFormModal({ ingredient, suppliers, onClose, onSaved, o
       else await api.post('/inventory/ingredients', { ...body, unit: form.unit });
       onSaved();
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     } finally {
       setSaving(false);
     }
@@ -227,7 +228,7 @@ export function ChangeUnitModal({ ingredient, onClose, onSaved }: {
       await api.patch(`/inventory/ingredients/${ingredient.id}/unit`, { unit: to, factor });
       onSaved();
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     } finally {
       setSaving(false);
     }
@@ -313,7 +314,7 @@ export function DeleteIngredientModal({ ingredient, onClose, onDone }: {
       await api.delete(`/inventory/ingredients/${ingredient.id}`, { params: { force: usedIn > 0 || undefined } });
       onDone();
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
       setDeleting(false);
     }
   };

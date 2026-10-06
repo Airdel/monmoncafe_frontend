@@ -3,7 +3,7 @@ import { Minus, Plus, Banknote, ArrowLeftRight, Zap, Loader2, ShoppingBag, Chevr
 import { cn } from '../lib/cn';
 import { api } from '../lib/api';
 import { formatMoney } from '../lib/format';
-import { getErrorMessage } from '../lib/errors';
+import { notifyError, toast } from '../lib/dialogs';
 import { unwrap } from '../lib/unwrap';
 import { formatDelta, unitLabel, type ModifierGroup, type ModifierOption } from '../lib/modifiers';
 import { Modal } from '../components/ui/Modal';
@@ -184,18 +184,16 @@ export function PosPage() {
         ...(payLater && { payLater: true }),
       }));
       const shortages = sale.stockWarnings?.length
-        ? `\n\nOjo: el inventario quedó en negativo en ${describeShortages(sale.stockWarnings)}.`
+        ? ` Ojo: el inventario quedó en negativo en ${describeShortages(sale.stockWarnings)}.`
         : '';
-      alert((payLater
-        ? `Pedido enviado a comandas sin cobrar. Comanda #${sale.id}`
-        : `¡Venta registrada! Comanda #${sale.id}`) + shortages);
+      if (payLater) toast.info(`Se cobra después desde Comandas. Comanda #${sale.id}.${shortages}`, 'Pedido enviado a comandas');
+      else toast.success(`Comanda #${sale.id}.${shortages}`, '¡Venta registrada!');
       setCart([]);
       setCustomerName('');
       setOrderNote('');
       setOrderOpen(false);
     } catch (err) {
-      console.error(err);
-      alert('Error al registrar la venta: ' + getErrorMessage(err));
+      notifyError(err, 'No se pudo registrar la venta');
     } finally {
       setIsProcessing(false);
     }

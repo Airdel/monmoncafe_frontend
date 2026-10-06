@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, ChevronLeft, ChevronRight, Plus, Send, X, Save, Trash2, ArrowUpDown, Layers, Store, Pencil, EyeOff, Power, type LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
-import { getErrorMessage } from '../lib/errors';
 import { unwrap } from '../lib/unwrap';
+import { notifyError } from '../lib/dialogs';
 import { useAuthStore } from '../store/auth';
 import { Modal } from '../components/ui/Modal';
 import { ModifiersTab } from '../components/inventory/ModifiersTab';
@@ -150,7 +150,7 @@ export function InventoryPage() {
       await api.patch(`/inventory/ingredients/${item.id}`, { isActive: true });
       afterIngredientChange();
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     }
   };
 
@@ -212,7 +212,7 @@ export function InventoryPage() {
       const res = await api.get('/inventory/ingredients');
       setIngredients(res.data.data || res.data);
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     } finally {
       setPurchaseSubmitting(false);
     }
@@ -233,7 +233,7 @@ export function InventoryPage() {
       const res = await api.get('/inventory/ingredients');
       setIngredients(res.data.data || res.data);
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     } finally {
       setAdjustSubmitting(false);
     }
@@ -264,7 +264,7 @@ export function InventoryPage() {
       setRecipe(data?.recipeIngredients || []);
       setEditingRecipe(false);
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     } finally {
       setRecipeSaving(false);
     }

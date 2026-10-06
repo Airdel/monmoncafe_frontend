@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Loader2, Pencil, Plus, Power, Save } from 'lucide-react';
 import { api } from '../../lib/api';
 import { getErrorMessage } from '../../lib/errors';
+import { confirm, notifyError } from '../../lib/dialogs';
 import { formatMoney } from '../../lib/format';
 import { unwrap } from '../../lib/unwrap';
 import { inputClass, labelClass, primaryButtonClass } from './styles';
@@ -79,20 +80,25 @@ export function ExpensesTab() {
       setEditing(null);
       reload();
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     } finally {
       setSaving(false);
     }
   };
 
   const toggleActive = async (e: FixedExpense) => {
-    if (e.isActive && !window.confirm(`¿Desactivar "${e.name}"?\n\nDejará de contarse en los cortes nuevos; los cortes ya cerrados no cambian.`)) return;
+    if (e.isActive && !await confirm({
+      title: `¿Desactivar “${e.name}”?`,
+      message: 'Dejará de contarse en los cortes nuevos; los cortes ya cerrados no cambian.',
+      confirmLabel: 'Desactivar',
+      tone: 'danger',
+    })) return;
     try {
       if (e.isActive) await api.delete(`/expenses/${e.id}`);
       else await api.patch(`/expenses/${e.id}`, { isActive: true });
       reload();
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     }
   };
 

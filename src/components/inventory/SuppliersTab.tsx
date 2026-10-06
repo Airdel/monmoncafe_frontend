@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ExternalLink, Loader2, MapPin, Pencil, Phone, Plus, Power, Save, Store } from 'lucide-react';
 import { api } from '../../lib/api';
 import { unwrap } from '../../lib/unwrap';
-import { getErrorMessage } from '../../lib/errors';
+import { confirm, notifyError } from '../../lib/dialogs';
 import { matchesSearch } from '../../lib/search';
 import { Modal } from '../ui/Modal';
 import { SearchInput } from '../ui/SearchInput';
@@ -115,20 +115,25 @@ export function SuppliersTab({ ingredients, canManage, onChanged }: { ingredient
       setForm(null);
       reload();
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     } finally {
       setSaving(false);
     }
   };
 
   const toggleActive = async (s: Supplier) => {
-    if (s.isActive && !window.confirm(`¿Desactivar "${s.name}"?\n\nYa no aparecerá al registrar compras; el historial se conserva.`)) return;
+    if (s.isActive && !await confirm({
+      title: `¿Desactivar “${s.name}”?`,
+      message: 'Ya no aparecerá al registrar compras; el historial se conserva.',
+      confirmLabel: 'Desactivar',
+      tone: 'danger',
+    })) return;
     try {
       if (s.isActive) await api.delete(`/suppliers/${s.id}`);
       else await api.patch(`/suppliers/${s.id}`, { isActive: true });
       reload();
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     }
   };
 

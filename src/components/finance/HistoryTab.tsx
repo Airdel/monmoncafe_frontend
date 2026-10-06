@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ChevronRight, Loader2, RotateCcw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { getErrorMessage } from '../../lib/errors';
+import { confirm, notifyError } from '../../lib/dialogs';
 import { formatDay, formatMoney, todayISO } from '../../lib/format';
 import { unwrap } from '../../lib/unwrap';
 import { ClosingBreakdown } from './ClosingBreakdown';
@@ -41,7 +42,7 @@ export function HistoryTab({ isAdmin, reloadKey }: { isAdmin: boolean; reloadKey
     try {
       setSelected(unwrap<DailyClosing>(await api.get(`/closings/${closing.id}`)));
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
       setSelected(null);
     } finally {
       setDetailLoading(false);
@@ -50,7 +51,12 @@ export function HistoryTab({ isAdmin, reloadKey }: { isAdmin: boolean; reloadKey
 
   const reopen = async () => {
     if (!selected) return;
-    const ok = window.confirm(`¿Reabrir el día ${formatDay(selected.date)}?\n\nSe borra este corte y sus ventas vuelven a quedar pendientes de cierre.`);
+    const ok = await confirm({
+      title: `¿Reabrir el día ${formatDay(selected.date)}?`,
+      message: 'Se borra este corte y sus ventas vuelven a quedar pendientes de cierre.',
+      confirmLabel: 'Reabrir día',
+      tone: 'danger',
+    });
     if (!ok) return;
     setReopening(true);
     try {
@@ -59,7 +65,7 @@ export function HistoryTab({ isAdmin, reloadKey }: { isAdmin: boolean; reloadKey
       setLoading(true);
       setLocalReload(k => k + 1);
     } catch (err) {
-      alert('Error: ' + getErrorMessage(err));
+      notifyError(err);
     } finally {
       setReopening(false);
     }
