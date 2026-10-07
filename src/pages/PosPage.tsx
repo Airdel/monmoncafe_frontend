@@ -8,14 +8,8 @@ import { unwrap } from '../lib/unwrap';
 import { formatDelta, unitLabel, type ModifierGroup, type ModifierOption } from '../lib/modifiers';
 import { Modal } from '../components/ui/Modal';
 import { productImageSrc } from '../lib/images';
+import { categoryEmoji, type ProductCategory as Category } from '../lib/categories';
 import * as motion from 'motion/react-client';
-
-interface Category {
-  id: number;
-  name: string;
-  icon: string;
-  color: string;
-}
 
 interface Product {
   id: number;
@@ -93,10 +87,8 @@ export function PosPage() {
       api.get('/modifiers'),
     ]).then(([catRes, prodRes, modRes]) => {
       setModifierGroups(unwrap<ModifierGroup[]>(modRes));
-      const catList: Category[] = catRes.data.data || catRes.data;
-      // Deduplicate categories in case seed was run multiple times
-      const uniqueCats = Array.from(new Map(catList.map(item => [item.name, item])).values());
-      setCategories(uniqueCats);
+      // Already in the order chosen in Inventario › Categorías
+      setCategories(unwrap<Category[]>(catRes));
       // Products switched off in Recetas are no longer sold
       setProducts(unwrap<Product[]>(prodRes).filter(p => p.isActive));
     }).catch(err => {
@@ -227,8 +219,10 @@ export function PosPage() {
             Todo
           </button>
           {categories.map((cat) => (
-            <button key={cat.id} onClick={() => setActiveCategory(cat.id)} className={chipClass(activeCategory === cat.id)}>
+            <button key={cat.id} onClick={() => setActiveCategory(cat.id)} className={cn(chipClass(activeCategory === cat.id), 'flex items-center gap-2')}>
+              {categoryEmoji(cat.icon) && <span className="text-base leading-none normal-case">{categoryEmoji(cat.icon)}</span>}
               {cat.name}
+              {cat.color && <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />}
             </button>
           ))}
         </div>
