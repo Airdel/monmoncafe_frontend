@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, ChevronLeft, ChevronRight, Plus, Send, X, Save, Trash2, ArrowUpDown, Layers, Store, Pencil, EyeOff, Power, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, ChevronLeft, ChevronRight, Plus, Send, X, Save, Trash2, ArrowUpDown, Layers, Store, Tags, Pencil, EyeOff, Power, type LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { unwrap } from '../lib/unwrap';
 import { notifyError } from '../lib/dialogs';
@@ -7,6 +7,7 @@ import { useAuthStore } from '../store/auth';
 import { Modal } from '../components/ui/Modal';
 import { ModifiersTab } from '../components/inventory/ModifiersTab';
 import { SuppliersTab } from '../components/inventory/SuppliersTab';
+import { CategoriesTab } from '../components/inventory/CategoriesTab';
 import { ProductEditModal, type EditableProduct } from '../components/inventory/ProductEditModal';
 import { productImageSrc } from '../lib/images';
 import { ChangeUnitModal, DeleteIngredientModal, IngredientFormModal, type ManagedIngredient } from '../components/inventory/IngredientDialogs';
@@ -64,7 +65,7 @@ interface Supplier {
   name: string;
 }
 
-type Tab = 'stock' | 'recipes' | 'modifiers' | 'suppliers' | 'purchases';
+type Tab = 'stock' | 'recipes' | 'categories' | 'modifiers' | 'suppliers' | 'purchases';
 type StockFilter = 'all' | 'low';
 
 export function InventoryPage() {
@@ -273,6 +274,7 @@ export function InventoryPage() {
   const tabs: { key: Tab; label: string; icon: LucideIcon }[] = [
     { key: 'stock', label: 'Stock', icon: Package },
     { key: 'recipes', label: 'Recetas', icon: SlidersHorizontal },
+    { key: 'categories', label: 'Categorías', icon: Tags },
     { key: 'modifiers', label: 'Opciones', icon: Layers },
     { key: 'suppliers', label: 'Tiendas', icon: Store },
     ...(canManage ? [{ key: 'purchases' as const, label: 'Compras', icon: ShoppingCart }] : []),
@@ -281,21 +283,21 @@ export function InventoryPage() {
   return (
     <div className="lg:h-full flex flex-col gap-4 sm:gap-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col 2xl:flex-row 2xl:items-center 2xl:justify-between gap-4">
         <div>
           <h1 className="font-headline text-2xl sm:text-3xl font-bold text-ink tracking-tight">Inventario</h1>
           <p className="text-ink/50 text-sm font-label uppercase tracking-wider mt-1">Gestión de stock, recetas y compras</p>
         </div>
         
         {/* Tabs */}
-        <div className="flex w-full sm:w-auto bg-ink/5 rounded-xl p-1 border border-ink/10">
+        <div className="flex w-full 2xl:w-auto self-start max-w-full bg-ink/5 rounded-xl p-1 border border-ink/10 overflow-x-auto scrollbar-none">
           {tabs.map(tab => {
             const Icon = tab.icon;
             return (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex-1 sm:flex-none justify-center px-1.5 sm:px-5 py-2.5 sm:py-2 rounded-lg font-label text-xs sm:text-sm uppercase sm:tracking-widest flex items-center gap-2 transition-all duration-300 ${
+                className={`flex-1 shrink-0 sm:flex-none justify-center px-2.5 sm:px-5 py-2.5 sm:py-2 rounded-lg font-label text-xs sm:text-sm uppercase sm:tracking-widest flex items-center gap-2 transition-all duration-300 ${
                   activeTab === tab.key
                     ? 'bg-primary/20 text-primary font-bold glow-primary-soft'
                     : 'text-ink/50 hover:text-ink'
@@ -692,6 +694,10 @@ export function InventoryPage() {
       {/* ═══ TAB: MODIFIERS ═══ */}
       {activeTab === 'modifiers' && (
         <ModifiersTab ingredients={ingredients} products={products} canManage={canManage} />
+      )}
+
+      {activeTab === 'categories' && (
+        <CategoriesTab canManage={canManage} onChanged={loadAll} />
       )}
 
       {activeTab === 'suppliers' && (

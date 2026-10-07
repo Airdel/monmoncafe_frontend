@@ -44,11 +44,7 @@ export function ProductEditModal({ product, onClose, onSaved }: {
 
   useEffect(() => {
     api.get('/products/categories')
-      .then(res => {
-        const list = unwrap<Category[]>(res);
-        // Same de-duplication by name as the POS, so the chosen category is the one shown there
-        setCategories(Array.from(new Map(list.map(c => [c.name, c])).values()));
-      })
+      .then(res => setCategories(unwrap<Category[]>(res)))
       .catch(err => setError(getErrorMessage(err)));
   }, []);
 
