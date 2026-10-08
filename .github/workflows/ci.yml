@@ -40,8 +40,28 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx cap sync android
+      # Same signing key on every run so new APKs install over the old one
+      - name: Restore signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            ks="$RUNNER_TEMP/monmoncafe.keystore"
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$ks"
+            alias=$(keytool -list -v -keystore "$ks" -storepass "$ANDROID_KEYSTORE_PASSWORD" | sed -n 's/^Alias name: //p' | head -1)
+            [ -n "$alias" ] || { echo "::error::Could not read the signing key (check ANDROID_KEYSTORE_PASSWORD)"; exit 1; }
+            echo "ANDROID_KEYSTORE_FILE=$ks" >> "$GITHUB_ENV"
+            echo "ANDROID_KEY_ALIAS=$alias" >> "$GITHUB_ENV"
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 secret not set; APK signed with a throwaway debug key"
+          fi
+
       - run: ./gradlew assembleDebug
         working-directory: android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
 
       - uses: actions/upload-artifact@v4
         with:
