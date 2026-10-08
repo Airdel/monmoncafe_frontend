@@ -24,7 +24,7 @@ android {
             stable {
                 storeFile file(System.getenv("ANDROID_KEYSTORE_FILE"))
                 storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                keyAlias "monmoncafe"
+                keyAlias System.getenv("ANDROID_KEY_ALIAS")
                 keyPassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
             }
         }
