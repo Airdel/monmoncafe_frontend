@@ -39,6 +39,8 @@ jobs:
 
       - run: npm ci
       - run: npm run build
+        env:
+          VITE_APP_VERSION: 1.0.${{ github.run_number }}
       - run: npx cap sync android
       # Same signing key on every run so new APKs install over the old one
       - name: Restore signing key
@@ -63,8 +65,11 @@ jobs:
           VERSION_CODE: ${{ github.run_number }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
 
+      # Versioned file name so shared APKs are easy to tell apart
+      - run: mv android/app/build/outputs/apk/debug/app-debug.apk "monmoncafe-v1.0.${{ github.run_number }}.apk"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: monmoncafe-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: monmoncafe-v1.0.${{ github.run_number }}
+          path: monmoncafe-v1.0.${{ github.run_number }}.apk
           retention-days: 30

@@ -2,6 +2,7 @@ import { Check, Coffee } from 'lucide-react';
 import { THEMES } from '../../lib/themes';
 import { useThemeStore } from '../../store/theme';
 import { Modal } from './Modal';
+import { APP_VERSION } from '../../lib/version';
 
 /** Theme chooser; each card renders a small live preview using that theme's tokens. */
 export function ThemePicker({ onClose }: { onClose: () => void }) {
@@ -46,6 +47,7 @@ export function ThemePicker({ onClose }: { onClose: () => void }) {
           );
         })}
       </div>
+      {APP_VERSION && <p className="text-center text-ink/40 text-xs mt-4">Versión {APP_VERSION}</p>}
     </Modal>
   );
 }
