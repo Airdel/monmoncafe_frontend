@@ -6,6 +6,7 @@ import { getErrorMessage } from '../lib/errors';
 import { getApiUrl, hasCustomApiUrl, isNativeApp, normalizeApiUrl, setApiUrl } from '../lib/server';
 import { useAuthStore } from '../store/auth';
 import * as motion from 'motion/react-client';
+import { APP_VERSION } from '../lib/version';
 
 export function LoginPage({ onOpenThemes }: { onOpenThemes: () => void }) {
   const [email, setEmail] = useState('');
@@ -149,6 +150,7 @@ export function LoginPage({ onOpenThemes }: { onOpenThemes: () => void }) {
           >
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Entrar'}
           </button>
+          {APP_VERSION && <p className="text-center text-ink/30 text-xs">Versión {APP_VERSION}</p>}
         </form>
       </motion.div>
     </div>
