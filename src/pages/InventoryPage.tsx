@@ -94,8 +94,9 @@ export function InventoryPage() {
   const [editRecipeRows, setEditRecipeRows] = useState<{ ingredientId: number; quantityUsed: string }[]>([]);
   const [recipeSaving, setRecipeSaving] = useState(false);
 
-  // Name, POS category, visibility and photo
+  // Name, POS category, price, visibility and photo
   const [editingProduct, setEditingProduct] = useState(false);
+  const [creatingProduct, setCreatingProduct] = useState(false);
 
   // Adjustment modal
   const [adjustModal, setAdjustModal] = useState<Ingredient | null>(null);
@@ -246,9 +247,20 @@ export function InventoryPage() {
     setEditingProduct(false);
   };
 
+  // A new product opens straight into its recipe so its insumos can be added
+  const productCreated = (created: EditableProduct) => {
+    setCreatingProduct(false);
+    setRecipeSearch('');
+    loadAll();
+    selectProduct(created.id);
+    setEditRecipeRows([{ ingredientId: 0, quantityUsed: '' }]);
+    setEditingRecipe(true);
+  };
+
   // Recipe editing helpers
   const startEditRecipe = () => {
-    setEditRecipeRows(recipe.map(r => ({ ingredientId: r.ingredient.id, quantityUsed: String(Number(r.quantityUsed)) })));
+    const rows = recipe.map(r => ({ ingredientId: r.ingredient.id, quantityUsed: String(Number(r.quantityUsed)) }));
+    setEditRecipeRows(rows.length > 0 ? rows : [{ ingredientId: 0, quantityUsed: '' }]);
     setEditingRecipe(true);
   };
 
@@ -518,6 +530,11 @@ export function InventoryPage() {
           {/* Product list (on phones it gives way to the chosen recipe) */}
           <div className={cn('glass-panel p-3 sm:p-4 flex flex-col gap-3 lg:w-72 shrink-0 min-h-0', selectedProductId && 'hidden lg:flex')}>
             <SearchInput value={recipeSearch} onChange={setRecipeSearch} placeholder="Buscar producto o categoría" />
+            {canManage && (
+              <button onClick={() => setCreatingProduct(true)} className="w-full py-2.5 rounded-xl bg-primary/15 border border-primary/30 text-primary text-sm font-semibold flex items-center justify-center gap-2 hover:bg-primary/20 transition-all">
+                <Plus className="w-4 h-4" /> Nueva receta
+              </button>
+            )}
             <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin -mx-1 px-1 space-y-1">
               {loading ? (
                 <div className="py-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></div>
@@ -621,7 +638,7 @@ export function InventoryPage() {
               <div className="glass-panel overflow-auto flex-1 border-ink/5">
                 {recipeLoading ? (
                   <div className="p-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></div>
-                ) : recipe.length === 0 ? (
+                ) : recipe.length === 0 && !editingRecipe ? (
                   <div className="p-8 text-center text-ink/40">Este producto no tiene receta asignada</div>
                 ) : (
                   <table className="w-full text-left border-collapse min-w-[420px]">
@@ -689,6 +706,9 @@ export function InventoryPage() {
 
       {editingProduct && selectedProduct && (
         <ProductEditModal product={selectedProduct} onClose={() => setEditingProduct(false)} onSaved={productSaved} />
+      )}
+      {creatingProduct && (
+        <ProductEditModal onClose={() => setCreatingProduct(false)} onSaved={productCreated} />
       )}
 
       {/* ═══ TAB: MODIFIERS ═══ */}
