@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ImagePlus, Loader2, Save, Trash2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { getErrorMessage } from '../../lib/errors';
+import { notifyError } from '../../lib/dialogs';
 import { productImageSrc, resizeImage } from '../../lib/images';
 import { unwrap } from '../../lib/unwrap';
 import { cn } from '../../lib/cn';
@@ -11,6 +12,7 @@ export interface EditableProduct {
   id: number;
   name: string;
   categoryId: number;
+  sellingPrice: string;
   isActive: boolean;
   imageUrl?: string | null;
   category?: { id?: number; name: string };
@@ -24,19 +26,24 @@ interface Category {
 const inputClass = 'w-full px-4 py-3 bg-ink/5 border border-ink/10 rounded-xl text-ink focus:border-primary/50 focus:outline-none placeholder:text-ink/20';
 const labelClass = 'text-ink/50 text-xs font-label uppercase tracking-widest block mb-2';
 
-/** Name, POS category, visibility and photo of a product (the recipe is edited separately). */
+/**
+ * Name, POS category, price, visibility and photo of a product (the recipe is edited separately).
+ * Without `product` it creates a new one.
+ */
 export function ProductEditModal({ product, onClose, onSaved }: {
-  product: EditableProduct;
+  product?: EditableProduct;
   onClose: () => void;
   onSaved: (product: EditableProduct) => void;
 }) {
   const [categories, setCategories] = useState<Category[]>([]);
-  const [name, setName] = useState(product.name);
-  const [categoryId, setCategoryId] = useState(product.categoryId);
-  const [isActive, setIsActive] = useState(product.isActive);
+  const [name, setName] = useState(product?.name ?? '');
+  // 0 until categories load; a new product then defaults to the first one
+  const [categoryId, setCategoryId] = useState(product?.categoryId ?? 0);
+  const [price, setPrice] = useState(product ? String(Number(product.sellingPrice)) : '');
+  const [isActive, setIsActive] = useState(product?.isActive ?? true);
   // undefined = keep current photo, null = remove it, Blob = upload this one
   const [photo, setPhoto] = useState<Blob | null | undefined>(undefined);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(productImageSrc(product.imageUrl));
+  const [photoPreview, setPhotoPreview] = useState<string | null>(productImageSrc(product?.imageUrl));
   const [processing, setProcessing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -44,7 +51,11 @@ export function ProductEditModal({ product, onClose, onSaved }: {
 
   useEffect(() => {
     api.get('/products/categories')
-      .then(res => setCategories(unwrap<Category[]>(res)))
+      .then(res => {
+        const list = unwrap<Category[]>(res);
+        setCategories(list);
+        setCategoryId(current => current || list[0]?.id || 0);
+      })
       .catch(err => setError(getErrorMessage(err)));
   }, []);
 
@@ -74,28 +85,43 @@ export function ProductEditModal({ product, onClose, onSaved }: {
     setPhotoPreview(null);
   };
 
-  const categoryOptions = categories.some(c => c.id === categoryId)
+  const categoryOptions = !categoryId || categories.some(c => c.id === categoryId)
     ? categories
-    : [...categories, { id: categoryId, name: product.category?.name ?? `Categoría ${categoryId}` }];
+    : [...categories, { id: categoryId, name: product?.category?.name ?? `Categoría ${categoryId}` }];
+
+  const priceValue = Number(price);
+  const priceValid = price.trim() !== '' && Number.isFinite(priceValue) && priceValue >= 0;
 
   const save = async () => {
     setSaving(true);
     setError('');
+    // Once created, a failed photo upload must not create the product twice on retry
+    let saved: EditableProduct | undefined;
     try {
-      let saved = unwrap<EditableProduct>(await api.patch(`/products/${product.id}`, {
+      const fields = {
         name: name.trim(),
         categoryId,
+        sellingPrice: Math.round(priceValue * 100) / 100,
         isActive,
-      }));
+      };
+      saved = unwrap<EditableProduct>(product
+        ? await api.patch(`/products/${product.id}`, fields)
+        : await api.post('/products', fields));
       if (photo) {
         const form = new FormData();
         form.append('image', photo, 'foto.jpg');
-        saved = unwrap<EditableProduct>(await api.post(`/products/${product.id}/image`, form));
-      } else if (photo === null && product.imageUrl) {
-        saved = unwrap<EditableProduct>(await api.delete(`/products/${product.id}/image`));
+        saved = unwrap<EditableProduct>(await api.post(`/products/${saved.id}/image`, form));
+      } else if (photo === null && product?.imageUrl) {
+        saved = unwrap<EditableProduct>(await api.delete(`/products/${saved.id}/image`));
       }
       onSaved(saved);
     } catch (err) {
+      if (saved && !product) {
+        // The product exists; carry on to its recipe and let them retry the photo from "Editar producto"
+        notifyError(err, 'Se creó el producto, pero no se pudo subir la foto');
+        onSaved(saved);
+        return;
+      }
       setError(getErrorMessage(err));
     } finally {
       setSaving(false);
@@ -103,7 +129,7 @@ export function ProductEditModal({ product, onClose, onSaved }: {
   };
 
   return (
-    <Modal title="Editar producto" onClose={onClose}>
+    <Modal title={product ? 'Editar producto' : 'Nueva receta'} onClose={onClose}>
       <div className="space-y-5">
         <div>
           <p className={labelClass}>Foto en el POS</p>
@@ -114,7 +140,7 @@ export function ProductEditModal({ product, onClose, onSaved }: {
               ) : photoPreview ? (
                 <img src={photoPreview} alt="" className="w-full h-full object-cover" />
               ) : (
-                <span className="font-headline font-bold text-2xl text-primary/30">{(name || product.name).substring(0, 2).toUpperCase()}</span>
+                <span className="font-headline font-bold text-2xl text-primary/30">{(name || product?.name || '?').substring(0, 2).toUpperCase()}</span>
               )}
             </div>
             <div className="flex flex-col gap-2 min-w-0">
@@ -138,7 +164,12 @@ export function ProductEditModal({ product, onClose, onSaved }: {
 
         <div>
           <label className={labelClass} htmlFor="product-name">Nombre</label>
-          <input id="product-name" value={name} onChange={e => setName(e.target.value)} maxLength={100} className={inputClass} />
+          <input id="product-name" value={name} onChange={e => setName(e.target.value)} maxLength={100} placeholder="Ej. Matcha latte" autoFocus={!product} className={inputClass} />
+        </div>
+
+        <div>
+          <label className={labelClass} htmlFor="product-price">Precio de venta</label>
+          <input id="product-price" type="number" min="0" step="0.5" inputMode="decimal" value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" className={`${inputClass} font-mono`} />
         </div>
 
         <div>
@@ -168,10 +199,10 @@ export function ProductEditModal({ product, onClose, onSaved }: {
 
         <button
           onClick={save}
-          disabled={saving || processing || !name.trim()}
+          disabled={saving || processing || !name.trim() || !categoryId || !priceValid}
           className="w-full py-3 rounded-xl bg-cta text-on-primary font-bold flex items-center justify-center gap-2 disabled:opacity-50"
         >
-          {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />} Guardar
+          {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />} {product ? 'Guardar' : 'Crear y agregar ingredientes'}
         </button>
       </div>
     </Modal>
