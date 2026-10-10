@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronDown, Loader2 } from 'lucide-react';
+import { Ban, ChevronDown, Loader2, Lock, Pencil } from 'lucide-react';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { getErrorMessage } from '../../lib/errors';
@@ -8,26 +8,12 @@ import { unitLabel } from '../../lib/modifiers';
 import { unwrap } from '../../lib/unwrap';
 import { inputClass, labelClass } from './styles';
 import { StatCard } from './ui';
-
-type Consumption = { ingredientId: number; name: string; unit: string; quantity: number; cost: number };
-
-type SaleRow = {
-  id: number;
-  createdAt: string;
-  status: 'COMPLETED' | 'CANCELLED' | string;
-  isPaid: boolean;
-  paymentMethod: 'CASH' | 'TRANSFER';
-  customerName: string | null;
-  cashier: string;
-  totalAmount: number;
-  discount: number;
-  cost: number;
-  items: { name: string; quantity: number; subtotal: number; cost: number; modifiers: string[] }[];
-  consumption: Consumption[];
-};
+import { CancelSaleDialog } from '../sales/CancelSaleDialog';
+import { EditSaleDialog } from '../sales/EditSaleDialog';
+import type { Consumption, SaleRow } from '../sales/types';
 
 type SalesHistory = {
-  summary: { salesCount: number; totalSales: number; totalCost: number; grossProfit: number };
+  summary: { salesCount: number; cancelledCount: number; totalSales: number; totalDiscount: number; totalCost: number; grossProfit: number };
   ingredients: Consumption[];
   sales: SaleRow[];
 };
@@ -66,6 +52,10 @@ export function SalesTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [openId, setOpenId] = useState<number | null>(null);
+  const [editing, setEditing] = useState<SaleRow | null>(null);
+  const [cancelling, setCancelling] = useState<SaleRow | null>(null);
+  // Bumped after a correction so the list and totals reload
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,7 +64,7 @@ export function SalesTab() {
       .catch(err => { if (!cancelled) setError(getErrorMessage(err)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [from, to]);
+  }, [from, to, version]);
 
   const changeRange = (setter: (v: string) => void, value: string) => {
     setLoading(true);
@@ -103,7 +93,15 @@ export function SalesTab() {
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            <StatCard label="Ventas" value={formatMoney(data.summary.totalSales)} tone="primary" />
+            <StatCard
+              label="Ventas"
+              value={formatMoney(data.summary.totalSales)}
+              tone="primary"
+              hint={[
+                data.summary.totalDiscount > 0 && `Descuentos −${formatMoney(data.summary.totalDiscount)}`,
+                data.summary.cancelledCount > 0 && `${data.summary.cancelledCount} anulada${data.summary.cancelledCount === 1 ? '' : 's'}`,
+              ].filter(Boolean).join(' · ') || undefined}
+            />
             <StatCard label="Costo de insumos" value={formatMoney(data.summary.totalCost)} tone="error" />
             <StatCard label="Utilidad bruta" value={formatMoney(data.summary.grossProfit)} tone="secondary" />
             <StatCard label="Tickets" value={String(data.summary.salesCount)} />
@@ -137,7 +135,9 @@ export function SalesTab() {
                         {sale.customerName && ` · ${sale.customerName}`}
                         {' · '}{sale.paymentMethod === 'CASH' ? 'Efectivo' : 'Transferencia'}
                         {!sale.isPaid && ' · Por cobrar'}
-                        {cancelled && ' · Cancelada'}
+                        {cancelled && ' · Anulada'}
+                        {!cancelled && sale.editedAt && ' · Corregida'}
+                        {!cancelled && sale.discount > 0 && ` · Desc. −${formatMoney(sale.discount)}`}
                       </p>
                     </div>
                     <div className="text-right">
@@ -157,6 +157,7 @@ export function SalesTab() {
                               <span className="text-ink/80 min-w-0">
                                 {item.quantity}× {item.name}
                                 {item.modifiers.length > 0 && <span className="block text-ink/40 text-xs">{item.modifiers.join(', ')}</span>}
+                                {item.discount > 0 && <span className="block text-secondary text-xs">Descuento −{formatMoney(item.discount)}</span>}
                               </span>
                               <span className="text-right whitespace-nowrap">
                                 <span className="text-ink/80">{formatMoney(item.subtotal)}</span>
@@ -165,11 +166,36 @@ export function SalesTab() {
                             </li>
                           ))}
                           {sale.discount > 0 && (
-                            <li className="flex justify-between text-ink/50">
-                              <span>Descuento</span><span>−{formatMoney(sale.discount)}</span>
+                            <li className="flex justify-between gap-3 text-ink/50">
+                              <span className="min-w-0">
+                                Descuento total
+                                {sale.discountReason && <span className="block text-xs">{sale.discountReason}</span>}
+                              </span>
+                              <span className="whitespace-nowrap">−{formatMoney(sale.discount)}</span>
                             </li>
                           )}
                         </ul>
+                        {cancelled && (
+                          <p className="mt-4 p-3 rounded-xl bg-error/10 border border-error/25 text-sm text-ink/80">
+                            <b className="text-error">Anulada</b>
+                            {sale.cancelledAt && ` el ${new Date(sale.cancelledAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}`}
+                            {sale.cancelReason && `: ${sale.cancelReason}`}
+                          </p>
+                        )}
+                        {!cancelled && (sale.inClosing ? (
+                          <p className="mt-4 text-ink/50 text-xs flex items-center gap-1.5">
+                            <Lock className="w-3.5 h-3.5 shrink-0" /> Ya está en un corte de caja. Para corregirla, reabre ese corte en Historial.
+                          </p>
+                        ) : (
+                          <div className="mt-4 flex gap-2">
+                            <button onClick={() => setEditing(sale)} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary/15 border border-primary/30 text-primary text-sm font-semibold hover:bg-primary/25">
+                              <Pencil className="w-4 h-4" /> Corregir
+                            </button>
+                            <button onClick={() => setCancelling(sale)} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-error/10 border border-error/25 text-error text-sm font-semibold hover:bg-error/20">
+                              <Ban className="w-4 h-4" /> Anular
+                            </button>
+                          </div>
+                        ))}
                       </div>
                       <div>
                         <p className={labelClass}>Insumos descontados</p>
@@ -185,6 +211,15 @@ export function SalesTab() {
           </div>
           {data.sales.length >= 500 && <p className="text-ink/40 text-xs font-label -mt-3">Se muestran las 500 ventas más recientes del periodo.</p>}
         </>
+      )}
+
+      {editing && <EditSaleDialog sale={editing} onDone={() => setVersion(v => v + 1)} onClose={() => setEditing(null)} />}
+      {cancelling && (
+        <CancelSaleDialog
+          sale={{ id: cancelling.id, totalAmount: cancelling.totalAmount, summary: cancelling.items.map(i => `${i.quantity}× ${i.name}`).join(', ') }}
+          onDone={() => setVersion(v => v + 1)}
+          onClose={() => setCancelling(null)}
+        />
       )}
     </div>
   );

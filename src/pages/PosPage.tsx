@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Minus, Plus, Banknote, ArrowLeftRight, Zap, Loader2, ShoppingBag, ChevronDown, Clock, AlertTriangle } from 'lucide-react';
+import { Minus, Plus, Banknote, ArrowLeftRight, Zap, Loader2, ShoppingBag, ChevronDown, Clock, AlertTriangle, Tag } from 'lucide-react';
 import { cn } from '../lib/cn';
 import { api } from '../lib/api';
 import { formatMoney } from '../lib/format';
 import { notifyError, toast } from '../lib/dialogs';
 import { unwrap } from '../lib/unwrap';
-import { formatDelta, unitLabel, type ModifierGroup, type ModifierOption } from '../lib/modifiers';
-import { Modal } from '../components/ui/Modal';
+import { unitLabel, type ModifierGroup, type ModifierOption } from '../lib/modifiers';
+import { NO_DISCOUNTS, orderTotals, type OrderDiscounts } from '../lib/discounts';
+import { OptionsPicker } from '../components/sales/OptionsPicker';
+import { DiscountDialog } from '../components/sales/DiscountDialog';
 import { productImageSrc } from '../lib/images';
 import { categoryEmoji, type ProductCategory as Category } from '../lib/categories';
 import * as motion from 'motion/react-client';
@@ -68,7 +70,10 @@ export function PosPage() {
   // Cart state
   const [cart, setCart] = useState<CartLine[]>([]);
   // Product waiting for the cashier to choose its options
-  const [picking, setPicking] = useState<{ product: Product; groups: ModifierGroup[]; selected: number[] } | null>(null);
+  const [picking, setPicking] = useState<{ product: Product; groups: ModifierGroup[] } | null>(null);
+  // Spilled coffee, courtesies... per line or on the whole order
+  const [discounts, setDiscounts] = useState<OrderDiscounts>(NO_DISCOUNTS);
+  const [discountOpen, setDiscountOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'TRANSFER'>('CASH');
   // Shown on the comanda so the bar can call the order without asking again
   const [customerName, setCustomerName] = useState('');
@@ -121,6 +126,14 @@ export function PosPage() {
   };
 
   const removeFromCart = (key: string) => {
+    if (cart.find(item => item.key === key)?.quantity === 1) {
+      // The line goes away, and its discount with it
+      setDiscounts(prev => {
+        const lines = { ...prev.lines };
+        delete lines[key];
+        return { ...prev, lines };
+      });
+    }
     setCart(prev => {
       const existing = prev.find(item => item.key === key);
       if (existing && existing.quantity > 1) {
@@ -135,33 +148,8 @@ export function PosPage() {
     const linked = new Set(product.modifierGroups?.map(g => g.groupId));
     const groups = modifierGroups.filter(g => linked.has(g.id) && g.options.length > 0);
     if (groups.length === 0) return addToCart(product);
-    // Required single-choice groups start on their first option
-    const selected = groups.filter(g => g.isRequired && !g.allowMultiple).map(g => g.options[0].id);
-    setPicking({ product, groups, selected });
+    setPicking({ product, groups });
   };
-
-  const toggleOption = (group: ModifierGroup, optionId: number) => {
-    setPicking(prev => {
-      if (!prev) return prev;
-      const isOn = prev.selected.includes(optionId);
-      const groupIds = new Set(group.options.map(o => o.id));
-      let selected: number[];
-      if (group.allowMultiple) {
-        selected = isOn ? prev.selected.filter(id => id !== optionId) : [...prev.selected, optionId];
-      } else if (isOn) {
-        // Required groups keep their choice; optional ones can be cleared
-        selected = group.isRequired ? prev.selected : prev.selected.filter(id => id !== optionId);
-      } else {
-        selected = [...prev.selected.filter(id => !groupIds.has(id)), optionId];
-      }
-      return { ...prev, selected };
-    });
-  };
-
-  const pickedOptions = picking
-    ? picking.groups.flatMap(g => g.options.filter(o => picking.selected.includes(o.id)))
-    : [];
-  const missingGroup = picking?.groups.find(g => g.isRequired && !g.options.some(o => picking.selected.includes(o.id)));
 
   /** payLater sends the order to Comandas now and it is charged there later. */
   const handleCheckout = async (payLater = false) => {
@@ -169,7 +157,14 @@ export function PosPage() {
     setIsProcessing(true);
     try {
       const sale = unwrap<{ id: number; stockWarnings?: StockWarning[] }>(await api.post('/sales', {
-        items: saleItems(cart),
+        items: saleItems(cart).map((item, i) => {
+          const discount = totals.lineDiscounts[cart[i].key];
+          return discount > 0 ? { ...item, discount } : item;
+        }),
+        ...(totals.totalDiscount > 0 && {
+          discount: totals.ticketDiscount,
+          discountReason: discounts.reason,
+        }),
         paymentMethod,
         customerName: customerName.trim() || undefined,
         notes: orderNote.trim() || undefined,
@@ -181,6 +176,7 @@ export function PosPage() {
       if (payLater) toast.info(`Se cobra después desde Comandas. Comanda #${sale.id}.${shortages}`, 'Pedido enviado a comandas');
       else toast.success(`Comanda #${sale.id}.${shortages}`, '¡Venta registrada!');
       setCart([]);
+      setDiscounts(NO_DISCOUNTS);
       setCustomerName('');
       setOrderNote('');
       setOrderOpen(false);
@@ -191,8 +187,14 @@ export function PosPage() {
     }
   };
 
-  // Matches what the backend charges: price plus options, no tax or tip
-  const total = cart.reduce((acc, item) => acc + unitPrice(item) * item.quantity, 0);
+  // Matches what the backend charges: price plus options, less discounts; no tax or tip
+  const discountLines = cart.map(item => ({
+    key: item.key,
+    label: `${item.quantity}× ${item.product.name}`,
+    subtotal: unitPrice(item) * item.quantity,
+  }));
+  const totals = orderTotals(discountLines, discounts);
+  const total = totals.total;
   const itemCount = cart.reduce((acc, item) => acc + item.quantity, 0);
 
   // Filter products
@@ -314,6 +316,9 @@ export function PosPage() {
                   {item.options.length > 0 && (
                     <p className="text-ink/50 text-xs line-clamp-2">{item.options.map(o => o.name).join(' · ')}</p>
                   )}
+                  {totals.lineDiscounts[item.key] > 0 && (
+                    <p className="text-secondary text-xs font-semibold">Descuento −{formatMoney(totals.lineDiscounts[item.key])}</p>
+                  )}
                   <div className="flex items-center gap-3 mt-1">
                     <button
                       onClick={() => removeFromCart(item.key)}
@@ -343,6 +348,21 @@ export function PosPage() {
 
         {/* Totals & Checkout */}
         <div className="pt-5 border-t border-ink/10 mt-4 shrink-0">
+          {cart.length > 0 && (
+            <div className="flex items-center justify-between gap-2 mb-3 text-sm">
+              <button
+                onClick={() => setDiscountOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-ink/5 border border-ink/10 text-ink/70 hover:text-ink hover:bg-ink/10 transition-colors"
+              >
+                <Tag className="w-4 h-4" /> {totals.totalDiscount > 0 ? 'Cambiar descuento' : 'Descuento'}
+              </button>
+              {totals.totalDiscount > 0 && (
+                <span className="text-secondary font-semibold text-right min-w-0 truncate" title={discounts.reason}>
+                  −{formatMoney(totals.totalDiscount)}
+                </span>
+              )}
+            </div>
+          )}
           <div className="flex justify-between items-end mb-4 gap-2">
             <div>
               <span className="font-headline text-2xl font-bold text-ink">Total</span>
@@ -417,46 +437,22 @@ export function PosPage() {
 
       {/* Options picker */}
       {picking && (
-        <Modal title={picking.product.name} onClose={() => setPicking(null)}>
-          <div className="space-y-5">
-            {picking.groups.map(group => (
-              <div key={group.id}>
-                <p className="text-ink/50 text-xs font-label uppercase tracking-widest mb-2">
-                  {group.name}
-                  <span className="ml-2 normal-case tracking-normal text-ink/30">
-                    {group.isRequired ? 'elige una' : group.allowMultiple ? 'opcional, varias' : 'opcional'}
-                  </span>
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {group.options.map(option => {
-                    const on = picking.selected.includes(option.id);
-                    return (
-                      <button
-                        key={option.id}
-                        onClick={() => toggleOption(group, option.id)}
-                        aria-pressed={on}
-                        className={cn(
-                          'px-3 py-3 rounded-xl border text-left transition-colors',
-                          on ? 'bg-primary/15 border-primary text-primary' : 'bg-ink/5 border-ink/10 text-ink/70 hover:bg-ink/10 hover:text-ink'
-                        )}
-                      >
-                        <span className="block font-medium text-sm">{option.name}</span>
-                        {formatDelta(option.priceDelta) && <span className="block font-mono text-xs opacity-70">{formatDelta(option.priceDelta)}</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-            <button
-              onClick={() => { addToCart(picking.product, pickedOptions); setPicking(null); }}
-              disabled={!!missingGroup}
-              className="w-full py-4 rounded-xl bg-cta text-on-primary font-bold text-lg flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {missingGroup ? `Elige ${missingGroup.name.toLowerCase()}` : <>Agregar · {formatMoney(unitPrice({ product: picking.product, options: pickedOptions }))}</>}
-            </button>
-          </div>
-        </Modal>
+        <OptionsPicker
+          title={picking.product.name}
+          groups={picking.groups}
+          basePrice={Number(picking.product.sellingPrice)}
+          onAdd={options => addToCart(picking.product, options)}
+          onClose={() => setPicking(null)}
+        />
+      )}
+
+      {discountOpen && (
+        <DiscountDialog
+          lines={discountLines}
+          value={discounts}
+          onChange={setDiscounts}
+          onClose={() => setDiscountOpen(false)}
+        />
       )}
     </div>
   );
