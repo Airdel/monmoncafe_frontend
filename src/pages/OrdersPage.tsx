@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeftRight, Banknote, BellRing, Check, ChefHat, Loader2, MessageSquareText, RotateCcw, User } from 'lucide-react';
+import { ArrowLeftRight, Ban, Banknote, BellRing, Check, ChefHat, Loader2, MessageSquareText, RotateCcw, User } from 'lucide-react';
 import * as motion from 'motion/react-client';
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
@@ -7,6 +7,8 @@ import { unwrap } from '../lib/unwrap';
 import { notifyError } from '../lib/dialogs';
 import { formatMoney } from '../lib/format';
 import { Modal } from '../components/ui/Modal';
+import { CancelSaleDialog } from '../components/sales/CancelSaleDialog';
+import { useAuthStore } from '../store/auth';
 
 type OrderStatus = 'PENDING' | 'READY' | 'DELIVERED';
 
@@ -67,6 +69,10 @@ export function OrdersPage() {
   const [cashReceived, setCashReceived] = useState('');
   const [paying, setPaying] = useState(false);
   const seen = useRef<Set<number> | null>(null);
+  // Voiding an order (cancelled or captured by mistake) is for admins and supervisors
+  const role = useAuthStore(state => state.user?.role);
+  const canCancel = role === 'ADMIN' || role === 'SUPERVISOR';
+  const [cancelling, setCancelling] = useState<Order | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -203,6 +209,15 @@ export function OrdersPage() {
                       {ready ? 'Lista' : 'Preparando'}
                     </span>
                     <p className="text-ink/40 text-xs mt-1">{minutesAgo(order.createdAt)}</p>
+                    {canCancel && (
+                      <button
+                        onClick={() => setCancelling(order)}
+                        className="mt-1 -mr-2 inline-flex items-center gap-1 px-2 py-1 rounded-lg text-ink/40 text-xs hover:text-error hover:bg-error/10"
+                        aria-label={`Anular comanda #${order.id}`}
+                      >
+                        <Ban className="w-3.5 h-3.5" /> Anular
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -284,6 +299,18 @@ export function OrdersPage() {
             );
           })}
         </div>
+      )}
+
+      {cancelling && (
+        <CancelSaleDialog
+          sale={{
+            id: cancelling.id,
+            totalAmount: cancelling.totalAmount,
+            summary: cancelling.items.map(i => `${i.quantity}× ${i.product.name}`).join(', '),
+          }}
+          onDone={() => setOrders(prev => prev.filter(o => o.id !== cancelling.id))}
+          onClose={() => setCancelling(null)}
+        />
       )}
 
       {charging && (
