@@ -52,7 +52,7 @@ export function FinancePage() {
         </div>
       </div>
 
-      {activeTab === 'closing' && <ClosingTab onClosed={() => setHistoryKey(k => k + 1)} />}
+      {activeTab === 'closing' && <ClosingTab canManage={canManageExpenses} onClosed={() => setHistoryKey(k => k + 1)} />}
       {activeTab === 'history' && <HistoryTab isAdmin={role === 'ADMIN'} reloadKey={historyKey} />}
       {activeTab === 'sales' && canManageExpenses && <SalesTab />}
       {activeTab === 'expenses' && canManageExpenses && <ExpensesTab />}

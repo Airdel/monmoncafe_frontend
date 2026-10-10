@@ -130,7 +130,7 @@ export function HistoryTab({ isAdmin, reloadKey }: { isAdmin: boolean; reloadKey
                 Cerrado por {selected.user?.name ?? '—'} el {new Date(selected.createdAt).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}
               </p>
               {selected.notes && <p className="text-ink/70 text-sm italic">“{selected.notes}”</p>}
-              <ClosingBreakdown totals={selected} details={selected.details ?? []} />
+              <ClosingBreakdown totals={selected} details={selected.details ?? []} expenses={selected.expenses ?? []} />
               {isAdmin && (
                 <button onClick={reopen} disabled={reopening} className="self-start flex items-center gap-2 px-4 py-2 rounded-xl border border-error/30 text-error/80 hover:text-error hover:bg-error/10 transition-all disabled:opacity-40">
                   {reopening ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />} Reabrir día

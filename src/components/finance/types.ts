@@ -47,6 +47,8 @@ export interface ClosingTotals {
   totalDiscount: number | string;
   grossProfit: number | string;
   fixedExpenses: number | string;
+  /** Tools and extras bought that day (absent on closings made before it existed). */
+  otherExpenses?: number | string;
   netProfit: number | string;
   marginPct: number | string;
   reinvestmentTotal: number | string;
@@ -55,10 +57,22 @@ export interface ClosingTotals {
   totalTransactions: number;
 }
 
+export interface DayExpense {
+  id: number;
+  description: string;
+  category: string;
+  quantity: number | null;
+  amount: number;
+  supplierName: string | null;
+  /** Checked off in the shopping list: it is undone there. */
+  fromShoppingList: boolean;
+}
+
 export interface ClosingPreview extends ClosingTotals {
   date: string;
   alreadyClosed: boolean;
   details: ClosingDetail[];
+  expenses: DayExpense[];
   /** Orders sent to the bar but not charged yet; they count on the day they are paid. */
   unpaidOrders?: { count: number; total: number };
 }
@@ -70,4 +84,5 @@ export interface DailyClosing extends ClosingTotals {
   createdAt: string;
   user?: { name: string };
   details?: ClosingDetail[];
+  expenses?: DayExpense[];
 }

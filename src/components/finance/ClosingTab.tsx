@@ -7,9 +7,9 @@ import { formatDay, formatMoney, todayISO } from '../../lib/format';
 import { unwrap } from '../../lib/unwrap';
 import { ClosingBreakdown } from './ClosingBreakdown';
 import { inputClass, labelClass, primaryButtonClass } from './styles';
-import type { ClosingPreview } from './types';
+import type { ClosingPreview, DayExpense } from './types';
 
-export function ClosingTab({ onClosed }: { onClosed: () => void }) {
+export function ClosingTab({ onClosed, canManage }: { onClosed: () => void; canManage: boolean }) {
   const [date, setDate] = useState(todayISO);
   const [reloadKey, setReloadKey] = useState(0);
   const [preview, setPreview] = useState<ClosingPreview | null>(null);
@@ -36,6 +36,23 @@ export function ClosingTab({ onClosed }: { onClosed: () => void }) {
   const refresh = () => {
     setLoading(true);
     setReloadKey(k => k + 1);
+  };
+
+  const deleteExpense = async (expense: DayExpense) => {
+    if (!await confirm({
+      title: `¿Quitar ${expense.description}?`,
+      message: expense.category === 'TOOL'
+        ? `Se borra el gasto de ${formatMoney(expense.amount)} y las piezas compradas salen de Herramientas.`
+        : `Se borra el gasto de ${formatMoney(expense.amount)}.`,
+      confirmLabel: 'Quitar',
+      tone: 'danger',
+    })) return;
+    try {
+      await api.delete(`/other-expenses/${expense.id}`);
+      refresh();
+    } catch (err) {
+      notifyError(err);
+    }
   };
 
   const closeDay = async () => {
@@ -96,7 +113,12 @@ export function ClosingTab({ onClosed }: { onClosed: () => void }) {
         <div className="glass-panel p-6 text-error">{error}</div>
       ) : preview && (
         <div className={loading ? 'opacity-50 pointer-events-none transition-opacity' : 'transition-opacity'}>
-          <ClosingBreakdown totals={preview} details={preview.details} />
+          <ClosingBreakdown
+            totals={preview}
+            details={preview.details}
+            expenses={preview.expenses}
+            onDeleteExpense={canManage && !preview.alreadyClosed ? deleteExpense : undefined}
+          />
 
           {!preview.alreadyClosed && !!preview.unpaidOrders?.count && (
             <p className="mt-6 p-4 rounded-xl bg-warning/10 border border-warning/30 text-ink text-sm flex items-start gap-2">
