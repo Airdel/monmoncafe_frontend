@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, ChevronLeft, ChevronRight, Plus, Send, X, Save, Trash2, ArrowUpDown, Layers, Store, Tags, Pencil, EyeOff, Power, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, ChevronLeft, ChevronRight, Plus, Send, X, Save, Trash2, ArrowUpDown, Layers, Store, Tags, Pencil, EyeOff, Power, Wrench, type LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { unwrap } from '../lib/unwrap';
 import { notifyError } from '../lib/dialogs';
@@ -8,6 +8,8 @@ import { Modal } from '../components/ui/Modal';
 import { ModifiersTab } from '../components/inventory/ModifiersTab';
 import { SuppliersTab } from '../components/inventory/SuppliersTab';
 import { CategoriesTab } from '../components/inventory/CategoriesTab';
+import { ToolsTab } from '../components/inventory/ToolsTab';
+import { OtherPurchaseForm } from '../components/inventory/OtherPurchaseForm';
 import { ProductEditModal, type EditableProduct } from '../components/inventory/ProductEditModal';
 import { productImageSrc } from '../lib/images';
 import { ChangeUnitModal, DeleteIngredientModal, IngredientFormModal, type ManagedIngredient } from '../components/inventory/IngredientDialogs';
@@ -65,7 +67,7 @@ interface Supplier {
   name: string;
 }
 
-type Tab = 'stock' | 'recipes' | 'categories' | 'modifiers' | 'suppliers' | 'purchases';
+type Tab = 'stock' | 'tools' | 'recipes' | 'categories' | 'modifiers' | 'suppliers' | 'purchases';
 type StockFilter = 'all' | 'low';
 
 export function InventoryPage() {
@@ -116,6 +118,7 @@ export function InventoryPage() {
   const [purchaseForm, setPurchaseForm] = useState({ ingredientId: 0, supplierId: 0, quantity: '', totalCost: '', notes: '' });
   const [purchaseSubmitting, setPurchaseSubmitting] = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState('');
+  const [purchaseKind, setPurchaseKind] = useState<'ingredient' | 'tool' | 'other'>('ingredient');
 
   const loadAll = () =>
     Promise.all([
@@ -285,6 +288,7 @@ export function InventoryPage() {
 
   const tabs: { key: Tab; label: string; icon: LucideIcon }[] = [
     { key: 'stock', label: 'Stock', icon: Package },
+    { key: 'tools', label: 'Herramientas', icon: Wrench },
     { key: 'recipes', label: 'Recetas', icon: SlidersHorizontal },
     { key: 'categories', label: 'Categorías', icon: Tags },
     { key: 'modifiers', label: 'Opciones', icon: Layers },
@@ -716,6 +720,8 @@ export function InventoryPage() {
         <ModifiersTab ingredients={ingredients} products={products} canManage={canManage} />
       )}
 
+      {activeTab === 'tools' && <ToolsTab suppliers={suppliers} canManage={canManage} />}
+
       {activeTab === 'categories' && (
         <CategoriesTab canManage={canManage} onChanged={loadAll} />
       )}
@@ -739,6 +745,22 @@ export function InventoryPage() {
                 <h3 className="font-label uppercase tracking-widest text-sm font-semibold text-ink">Registrar Compra</h3>
               </div>
 
+              <div className="flex bg-ink/5 rounded-xl p-1 border border-ink/10 mb-4">
+                {([['ingredient', 'Insumo'], ['tool', 'Herramienta'], ['other', 'Otro gasto']] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => { setPurchaseKind(key); setPurchaseSuccess(''); }}
+                    className={`flex-1 px-2 py-2 rounded-lg text-sm font-medium transition-all ${purchaseKind === key ? 'bg-primary/20 text-primary' : 'text-ink/50 hover:text-ink'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {purchaseKind !== 'ingredient' ? (
+                <OtherPurchaseForm key={purchaseKind} mode={purchaseKind} suppliers={suppliers} canManage={canManage} onDone={loadAll} />
+              ) : (
               <div className="space-y-4">
                 {/* Ingredient Select */}
                 <div>
@@ -836,6 +858,7 @@ export function InventoryPage() {
                   {purchaseSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send className="w-4 h-4" /> Registrar Compra</>}
                 </button>
               </div>
+              )}
             </div>
           </motion.div>
 
