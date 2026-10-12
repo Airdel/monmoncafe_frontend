@@ -1,8 +1,10 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/auth';
 import { getApiUrl } from './server';
+import { setServerOnline } from '../store/connection';
 
-export const api = axios.create();
+// Without a limit a request to the PC while it is off can hang for minutes
+export const api = axios.create({ timeout: 30000 });
 
 api.interceptors.request.use(
   (config) => {
@@ -17,8 +19,14 @@ api.interceptors.request.use(
 );
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    setServerOnline(true);
+    return response;
+  },
   async (error) => {
+    // No answer at all (or Tailscale saying the API is down): the PC is off
+    const status = error.response?.status;
+    setServerOnline(!!error.response && ![502, 503, 504].includes(status));
     const originalRequest = error.config;
     // A 401 from /auth/login (wrong credentials) or with no session to renew
     // is a real error for the caller, not an expired access token.
