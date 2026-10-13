@@ -10,6 +10,10 @@ import { NO_DISCOUNTS, orderTotals, type OrderDiscounts } from '../lib/discounts
 import { OptionsPicker } from '../components/sales/OptionsPicker';
 import { DiscountDialog } from '../components/sales/DiscountDialog';
 import { productImageSrc } from '../lib/images';
+import { cachedGet, isOfflineError, QUICK_TIMEOUT_MS } from '../lib/offline';
+import { useConnectionStore } from '../store/connection';
+import { newClientId, useOfflineSales, type SalePayload } from '../store/offlineSales';
+import { useAuthStore } from '../store/auth';
 import { categoryEmoji, type ProductCategory as Category } from '../lib/categories';
 import * as motion from 'motion/react-client';
 
@@ -85,25 +89,35 @@ export function PosPage() {
   const [stockCheck, setStockCheck] = useState<{ cartKey: string; warnings: StockWarning[] } | null>(null);
   const cartKey = cart.map(item => `${item.key}x${item.quantity}`).join(',');
 
+  const online = useConnectionStore(state => state.online);
+  const cashier = useAuthStore(state => state.user?.name ?? '');
+
+  // Kept on the device too, so the menu is still there when the PC at home is off
   useEffect(() => {
     Promise.all([
-      api.get('/products/categories'),
-      api.get('/products'),
-      api.get('/modifiers'),
-    ]).then(([catRes, prodRes, modRes]) => {
-      setModifierGroups(unwrap<ModifierGroup[]>(modRes));
+      cachedGet<Category[]>('/products/categories'),
+      cachedGet<Product[]>('/products'),
+      cachedGet<ModifierGroup[]>('/modifiers'),
+    ]).then(([cats, prods, mods]) => {
+      setModifierGroups(mods);
       // Already in the order chosen in Inventario › Categorías
-      setCategories(unwrap<Category[]>(catRes));
+      setCategories(cats);
       // Products switched off in Recetas are no longer sold
-      setProducts(unwrap<Product[]>(prodRes).filter(p => p.isActive));
+      const active = prods.filter(p => p.isActive);
+      setProducts(active);
+      // Load every photo once so the browser keeps them for when there is no connection
+      for (const p of active) {
+        const src = productImageSrc(p.imageUrl);
+        if (src) new Image().src = src;
+      }
     }).catch(err => {
-      console.error(err);
+      notifyError(err, 'No se pudo cargar el menú');
     }).finally(() => setLoading(false));
   }, []);
 
   // Missing stock never blocks a sale, but the cashier should know before charging
   useEffect(() => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || !online) return;
     let cancelled = false;
     const timer = setTimeout(() => {
       api.post('/sales/stock-check', { items: saleItems(cart) })
@@ -111,7 +125,7 @@ export function PosPage() {
         .catch(() => { /* only a warning: if it fails, selling still works */ });
     }, 300);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [cart, cartKey]);
+  }, [cart, cartKey, online]);
   const stockWarnings = cart.length > 0 && stockCheck?.cartKey === cartKey ? stockCheck.warnings : [];
 
   const addToCart = (product: Product, options: ModifierOption[] = []) => {
@@ -151,37 +165,72 @@ export function PosPage() {
     setPicking({ product, groups });
   };
 
+  const clearOrder = () => {
+    setCart([]);
+    setDiscounts(NO_DISCOUNTS);
+    setCustomerName('');
+    setOrderNote('');
+    setOrderOpen(false);
+  };
+
+  /**
+   * Keeps the sale on the device when the server can't be reached; it is
+   * sent on its own when the connection is back.
+   */
+  const saveOffline = (clientId: string, payload: SalePayload) => {
+    useOfflineSales.getState().add({
+      clientId,
+      soldAt: new Date().toISOString(),
+      payload,
+      total,
+      lines: cart.map(item => ({ quantity: item.quantity, name: item.product.name, options: item.options.map(o => o.name) })),
+      cashier,
+    });
+    toast.info(
+      payload.payLater
+        ? 'Está en Comandas por cobrar y se enviará sola cuando vuelva la conexión.'
+        : 'Se guardó en este dispositivo y se enviará sola cuando vuelva la conexión.',
+      'Venta guardada sin conexión'
+    );
+    clearOrder();
+  };
+
   /** payLater sends the order to Comandas now and it is charged there later. */
   const handleCheckout = async (payLater = false) => {
     if (cart.length === 0) return;
+    const payload: SalePayload = {
+      items: saleItems(cart).map((item, i) => {
+        const discount = totals.lineDiscounts[cart[i].key];
+        return discount > 0 ? { ...item, discount } : item;
+      }),
+      ...(totals.totalDiscount > 0 && {
+        discount: totals.ticketDiscount,
+        discountReason: discounts.reason,
+      }),
+      paymentMethod,
+      customerName: customerName.trim() || undefined,
+      notes: orderNote.trim() || undefined,
+      ...(payLater && { payLater: true }),
+    };
+    // The same id on a retry or a later sync, so the sale is never recorded twice
+    const clientId = newClientId();
+    if (!online) return saveOffline(clientId, payload);
+
     setIsProcessing(true);
     try {
-      const sale = unwrap<{ id: number; stockWarnings?: StockWarning[] }>(await api.post('/sales', {
-        items: saleItems(cart).map((item, i) => {
-          const discount = totals.lineDiscounts[cart[i].key];
-          return discount > 0 ? { ...item, discount } : item;
-        }),
-        ...(totals.totalDiscount > 0 && {
-          discount: totals.ticketDiscount,
-          discountReason: discounts.reason,
-        }),
-        paymentMethod,
-        customerName: customerName.trim() || undefined,
-        notes: orderNote.trim() || undefined,
-        ...(payLater && { payLater: true }),
-      }));
+      const sale = unwrap<{ id: number; stockWarnings?: StockWarning[] }>(
+        await api.post('/sales', { ...payload, clientId }, { timeout: QUICK_TIMEOUT_MS })
+      );
       const shortages = sale.stockWarnings?.length
         ? ` Ojo: el inventario quedó en negativo en ${describeShortages(sale.stockWarnings)}.`
         : '';
       if (payLater) toast.info(`Se cobra después desde Comandas. Comanda #${sale.id}.${shortages}`, 'Pedido enviado a comandas');
       else toast.success(`Comanda #${sale.id}.${shortages}`, '¡Venta registrada!');
-      setCart([]);
-      setDiscounts(NO_DISCOUNTS);
-      setCustomerName('');
-      setOrderNote('');
-      setOrderOpen(false);
+      clearOrder();
     } catch (err) {
-      notifyError(err, 'No se pudo registrar la venta');
+      // It may even have reached the server: the clientId keeps it from counting twice
+      if (isOfflineError(err)) saveOffline(clientId, payload);
+      else notifyError(err, 'No se pudo registrar la venta');
     } finally {
       setIsProcessing(false);
     }
@@ -252,6 +301,7 @@ export function PosPage() {
                     src={productImageSrc(product.imageUrl) ?? undefined}
                     alt=""
                     loading="lazy"
+                    onError={e => { e.currentTarget.style.visibility = 'hidden'; }}
                     className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500"
                   />
                 ) : (

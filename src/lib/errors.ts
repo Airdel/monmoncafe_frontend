@@ -3,6 +3,9 @@ import { isAxiosError } from 'axios';
 /** Extracts a readable message from an API (NestJS) or generic error. */
 export function getErrorMessage(err: unknown, fallback = 'Error inesperado'): string {
   if (isAxiosError(err)) {
+    if (!err.response || [502, 503, 504].includes(err.response.status)) {
+      return 'Sin conexión con el servidor. Inténtalo cuando vuelva la conexión.';
+    }
     const message = err.response?.data?.message;
     if (Array.isArray(message)) return message.join(', ');
     if (typeof message === 'string') return message;

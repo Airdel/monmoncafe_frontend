@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { SideNavBar } from './components/layout/SideNavBar';
 import { BottomNav, MobileTopBar } from './components/layout/MobileNav';
 import { ThemePicker } from './components/ui/ThemePicker';
 import { DialogHost } from './components/ui/DialogHost';
+import { ConnectionBanner } from './components/layout/ConnectionBanner';
+import { startOfflineSync } from './lib/offline';
 import { InventoryPage } from './pages/InventoryPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { PosPage } from './pages/PosPage';
@@ -18,6 +20,9 @@ function App() {
   const { accessToken, user } = useAuthStore();
   const [showThemes, setShowThemes] = useState(false);
   const openThemes = () => setShowThemes(true);
+
+  // Sales made while the PC at home was off are sent once it answers again
+  useEffect(() => (accessToken ? startOfflineSync() : undefined), [accessToken]);
 
   const themePicker = showThemes && <ThemePicker onClose={() => setShowThemes(false)} />;
 
@@ -37,6 +42,7 @@ function App() {
 
       <div className="flex-1 min-w-0 flex flex-col">
         <MobileTopBar onOpenThemes={openThemes} />
+        <ConnectionBanner />
         <main className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <Routes>
             <Route path="/" element={<DashboardPage />} />

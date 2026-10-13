@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeftRight, Ban, Banknote, BellRing, Check, ChefHat, Loader2, MessageSquareText, RotateCcw, User } from 'lucide-react';
+import { ArrowLeftRight, Ban, Banknote, BellRing, Check, ChefHat, CloudOff, Loader2, MessageSquareText, RotateCcw, User } from 'lucide-react';
 import * as motion from 'motion/react-client';
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
-import { unwrap } from '../lib/unwrap';
-import { notifyError } from '../lib/dialogs';
+import { cachedGet } from '../lib/offline';
+import { useConnectionStore } from '../store/connection';
+import { useOfflineSales, type QueuedSale } from '../store/offlineSales';
+import { confirm, notifyError } from '../lib/dialogs';
 import { formatMoney } from '../lib/format';
 import { Modal } from '../components/ui/Modal';
 import { CancelSaleDialog } from '../components/sales/CancelSaleDialog';
@@ -27,7 +29,28 @@ interface Order {
     product: { name: string };
     modifiers: { name: string }[];
   }[];
+  /** Made without connection and not on the server yet. */
+  local?: QueuedSale;
 }
+
+/** A sale saved offline, shown as a comanda until it reaches the server. */
+const queuedOrder = (sale: QueuedSale, index: number): Order => ({
+  id: -(index + 1),
+  createdAt: sale.soldAt,
+  orderStatus: sale.payload.orderStatus ?? 'PENDING',
+  isPaid: !sale.payload.payLater,
+  totalAmount: String(sale.total),
+  customerName: sale.payload.customerName ?? null,
+  notes: sale.payload.notes ?? null,
+  user: { name: sale.cashier },
+  items: sale.lines.map((line, i) => ({
+    id: i,
+    quantity: line.quantity,
+    product: { name: line.name },
+    modifiers: line.options.map(name => ({ name })),
+  })),
+  local: sale,
+});
 
 type Filter = 'all' | OrderStatus | 'UNPAID';
 
@@ -59,7 +82,14 @@ function beep() {
 
 /** Comandas: what was ordered, with its options and notes, until it is handed out. */
 export function OrdersPage() {
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [serverOrders, setOrders] = useState<Order[]>([]);
+  const online = useConnectionStore(state => state.online);
+  const queued = useOfflineSales(state => state.sales);
+  // Sales made offline show up here right away; delivered ones are done on the device
+  const orders = [
+    ...serverOrders,
+    ...queued.map(queuedOrder).filter(o => o.orderStatus !== 'DELIVERED' || !o.isPaid),
+  ];
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('all');
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -76,7 +106,8 @@ export function OrdersPage() {
 
   const load = useCallback(async () => {
     try {
-      const list = unwrap<Order[]>(await api.get('/sales/orders'));
+      // The last list stays on the device for when the server is off
+      const list = await cachedGet<Order[]>('/sales/orders');
       // Ring only for orders that arrived after the first load
       if (seen.current && list.some(o => !seen.current!.has(o.id))) beep();
       seen.current = new Set(list.map(o => o.id));
@@ -95,6 +126,11 @@ export function OrdersPage() {
   }, [load]);
 
   const setStatus = async (order: Order, orderStatus: OrderStatus) => {
+    if (order.local) {
+      // Goes to the server together with the sale
+      useOfflineSales.getState().update(order.local.clientId, s => ({ ...s, payload: { ...s.payload, orderStatus } }));
+      return;
+    }
     setBusyId(order.id);
     try {
       await api.patch(`/sales/${order.id}/order-status`, { orderStatus });
@@ -107,6 +143,18 @@ export function OrdersPage() {
     }
   };
 
+  /** A sale made offline by mistake never reaches the server. */
+  const discardLocal = async (sale: QueuedSale) => {
+    const ok = await confirm({
+      title: 'Anular venta sin enviar',
+      message: 'Se borra de este dispositivo y no llegará al servidor.',
+      details: [{ label: 'Total', value: formatMoney(sale.total) }],
+      confirmLabel: 'Anular',
+      tone: 'danger',
+    });
+    if (ok) useOfflineSales.getState().remove(sale.clientId);
+  };
+
   const openCharge = (order: Order, deliver: boolean) => {
     setPayMethod('CASH');
     setCashReceived('');
@@ -116,6 +164,21 @@ export function OrdersPage() {
   const charge = async () => {
     if (!charging) return;
     const { order, deliver } = charging;
+    if (order.local) {
+      const received = payMethod === 'CASH' && cashReceived ? Number(cashReceived) : undefined;
+      useOfflineSales.getState().update(order.local.clientId, s => ({
+        ...s,
+        payload: {
+          ...s.payload,
+          payLater: false,
+          paymentMethod: payMethod,
+          cashReceived: received,
+          ...(deliver && { orderStatus: 'DELIVERED' as const }),
+        },
+      }));
+      setCharging(null);
+      return;
+    }
     setPaying(true);
     try {
       await api.post(`/sales/${order.id}/pay`, {
@@ -172,6 +235,13 @@ export function OrdersPage() {
         </div>
       </div>
 
+      {!online && (
+        <p role="status" className="p-3 rounded-xl border border-warning/40 bg-warning/10 text-sm text-ink/80 flex gap-2">
+          <CloudOff className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+          Sin conexión con el servidor: ves las comandas guardadas en este dispositivo. Las que dicen “Sin enviar” puedes cobrarlas y entregarlas; las demás, cuando vuelva la conexión.
+        </p>
+      )}
+
       {loading ? (
         <div className="glass-panel p-10 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
       ) : visible.length === 0 ? (
@@ -186,7 +256,7 @@ export function OrdersPage() {
             const busy = busyId === order.id;
             return (
               <motion.div
-                key={order.id}
+                key={order.local?.clientId ?? order.id}
                 layout
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -194,7 +264,13 @@ export function OrdersPage() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-headline text-2xl font-bold text-ink leading-none">#{order.id}</p>
+                    {order.local ? (
+                      <p className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-warning/15 text-warning text-xs font-bold" title="Hecha sin conexión; se envía sola al volver">
+                        <CloudOff className="w-4 h-4" /> Sin enviar
+                      </p>
+                    ) : (
+                      <p className="font-headline text-2xl font-bold text-ink leading-none">#{order.id}</p>
+                    )}
                     {order.customerName && (
                       <p className="flex items-center gap-1.5 text-primary font-bold mt-1.5 truncate">
                         <User className="w-4 h-4 shrink-0" /> {order.customerName}
@@ -211,7 +287,7 @@ export function OrdersPage() {
                     <p className="text-ink/40 text-xs mt-1">{minutesAgo(order.createdAt)}</p>
                     {canCancel && (
                       <button
-                        onClick={() => setCancelling(order)}
+                        onClick={() => order.local ? discardLocal(order.local) : setCancelling(order)}
                         className="mt-1 -mr-2 inline-flex items-center gap-1 px-2 py-1 rounded-lg text-ink/40 text-xs hover:text-error hover:bg-error/10"
                         aria-label={`Anular comanda #${order.id}`}
                       >
@@ -314,7 +390,7 @@ export function OrdersPage() {
       )}
 
       {charging && (
-        <Modal title={`Cobrar comanda #${charging.order.id}`} onClose={() => setCharging(null)}>
+        <Modal title={charging.order.local ? 'Cobrar comanda' : `Cobrar comanda #${charging.order.id}`} onClose={() => setCharging(null)}>
           <div className="space-y-4">
             <div className="flex items-end justify-between">
               <span className="text-ink/50 text-sm">{charging.order.customerName ?? 'Total'}</span>
