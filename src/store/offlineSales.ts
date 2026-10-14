@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 
 /** What POST /sales takes, without the fields the queue adds when sending it. */
 export interface SalePayload {
-  items: { productId: number; quantity: number; modifierOptionIds?: number[]; discount?: number }[];
+  items: { productId: number; quantity: number; modifierOptionIds?: number[]; discount?: number; chargedUnitPrice?: number }[];
   paymentMethod: 'CASH' | 'TRANSFER';
   cashReceived?: number;
   discount?: number;

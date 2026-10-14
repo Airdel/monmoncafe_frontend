@@ -10,7 +10,7 @@ import { NO_DISCOUNTS, orderTotals, type OrderDiscounts } from '../lib/discounts
 import { OptionsPicker } from '../components/sales/OptionsPicker';
 import { DiscountDialog } from '../components/sales/DiscountDialog';
 import { productImageSrc } from '../lib/images';
-import { cachedGet, isOfflineError, QUICK_TIMEOUT_MS } from '../lib/offline';
+import { cachedGet, isOfflineError, QUICK_TIMEOUT_MS, withQueuedProductEdits } from '../lib/offline';
 import { useConnectionStore } from '../store/connection';
 import { newClientId, useOfflineSales, type SalePayload } from '../store/offlineSales';
 import { useAuthStore } from '../store/auth';
@@ -102,8 +102,9 @@ export function PosPage() {
       setModifierGroups(mods);
       // Already in the order chosen in Inventario › Categorías
       setCategories(cats);
-      // Products switched off in Recetas are no longer sold
-      const active = prods.filter(p => p.isActive);
+      // Products switched off in Recetas are no longer sold; price edits made
+      // offline on this device already apply
+      const active = withQueuedProductEdits(prods).filter(p => p.isActive);
       setProducts(active);
       // Load every photo once so the browser keeps them for when there is no connection
       for (const p of active) {
@@ -181,7 +182,12 @@ export function PosPage() {
     useOfflineSales.getState().add({
       clientId,
       soldAt: new Date().toISOString(),
-      payload,
+      // The price charged here, from this device's menu: if someone changes it
+      // before this sale arrives, the server still records what the customer paid
+      payload: {
+        ...payload,
+        items: payload.items.map((item, i) => ({ ...item, chargedUnitPrice: Math.round(unitPrice(cart[i]) * 100) / 100 })),
+      },
       total,
       lines: cart.map(item => ({ quantity: item.quantity, name: item.product.name, options: item.options.map(o => o.name) })),
       cashier,

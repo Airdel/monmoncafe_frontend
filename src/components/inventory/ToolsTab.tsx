@@ -164,7 +164,12 @@ export function ToolsTab({ suppliers, canManage }: { suppliers: SupplierRef[]; c
         else reload();
       }} />}
       {history && <HistoryModal tool={history} onClose={() => setHistory(null)} onEdit={canManage ? () => { setForm(history); setHistory(null); } : undefined} />}
-      {counting && <CountModal tools={active} onClose={() => setCounting(false)} onSaved={() => { setCounting(false); reload(); }} />}
+      {counting && <CountModal tools={active} onClose={() => setCounting(false)} onSaved={queued => {
+        setCounting(false);
+        // Show the count right away; the server applies it with its real time
+        if (queued) setTools(ts => ts.map(t => (t.id in queued ? { ...t, quantity: queued[t.id] } : t)));
+        else reload();
+      }} />}
     </div>
   );
 }
@@ -387,7 +392,7 @@ function HistoryModal({ tool, onClose, onEdit }: { tool: Tool; onClose: () => vo
   );
 }
 
-function CountModal({ tools, onClose, onSaved }: { tools: Tool[]; onClose: () => void; onSaved: () => void }) {
+function CountModal({ tools, onClose, onSaved }: { tools: Tool[]; onClose: () => void; onSaved: (queued?: Record<number, number>) => void }) {
   const [counts, setCounts] = useState<Record<number, string>>(() => Object.fromEntries(tools.map(t => [t.id, String(t.quantity)])));
   const [saving, setSaving] = useState(false);
   const changed = tools.filter(t => counts[t.id] !== '' && Number(counts[t.id]) !== t.quantity);
@@ -397,7 +402,13 @@ function CountModal({ tools, onClose, onSaved }: { tools: Tool[]; onClose: () =>
     if (!valid || changed.length === 0) return;
     setSaving(true);
     try {
-      await api.post('/tools/count', { items: changed.map(t => ({ id: t.id, quantity: Number(counts[t.id]) })) });
+      const items = changed.map(t => ({ id: t.id, quantity: Number(counts[t.id]) }));
+      const sent = await sendOrQueue('/tools/count', { items }, `Conteo de herramientas: ${changed.length} ${changed.length === 1 ? 'cambio' : 'cambios'}`);
+      if (sent.queued) {
+        toast.success(QUEUED_MESSAGE);
+        onSaved(Object.fromEntries(items.map(i => [i.id, i.quantity])));
+        return;
+      }
       toast.success(`Conteo guardado: ${changed.length} ${changed.length === 1 ? 'cambio' : 'cambios'}`);
       onSaved();
     } catch (err) {

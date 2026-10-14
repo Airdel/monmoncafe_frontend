@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, ChevronLeft, ChevronRight, Plus, Send, X, Save, Trash2, ArrowUpDown, Layers, Store, Tags, Pencil, EyeOff, Power, Wrench, type LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { unwrap } from '../lib/unwrap';
-import { notifyError, toast } from '../lib/dialogs';
-import { cachedGet, QUEUED_MESSAGE, sendOrQueue } from '../lib/offline';
+import { confirm, notifyError, toast } from '../lib/dialogs';
+import { getErrorMessage } from '../lib/errors';
+import { cachedGet, isEditConflict, QUEUED_MESSAGE, queuedRecipe, sendOrQueue, withQueuedProductEdits } from '../lib/offline';
 import { useAuthStore } from '../store/auth';
+import { useOfflineOps } from '../store/offlineOps';
 import { Modal } from '../components/ui/Modal';
 import { ModifiersTab } from '../components/inventory/ModifiersTab';
 import { SuppliersTab } from '../components/inventory/SuppliersTab';
@@ -63,6 +65,15 @@ interface RecipeIngredient {
   ingredient: Ingredient;
 }
 
+/** Lines saved offline, shown with the insumos this device knows. */
+function recipeFromLines(lines: { ingredientId: number; quantityUsed: number }[], current: RecipeIngredient[], ingredients: Ingredient[]): RecipeIngredient[] {
+  return lines.flatMap((line, i) => {
+    const ingredient = ingredients.find(ing => ing.id === line.ingredientId)
+      ?? current.find(r => r.ingredient.id === line.ingredientId)?.ingredient;
+    return ingredient ? [{ id: -1 - i, quantityUsed: String(line.quantityUsed), ingredient }] : [];
+  });
+}
+
 interface Supplier {
   id: number;
   name: string;
@@ -88,7 +99,8 @@ export function InventoryPage() {
   // Recipe composer
   const [recipeSearch, setRecipeSearch] = useState('');
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
-  const [recipe, setRecipe] = useState<RecipeIngredient[]>([]);
+  // The recipe as the server (or its copy on this device) has it
+  const [serverRecipe, setRecipe] = useState<RecipeIngredient[]>([]);
   const [recipeLoading, setRecipeLoading] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductWithRecipe | null>(null);
 
@@ -129,7 +141,7 @@ export function InventoryPage() {
       cachedGet<Supplier[]>('/suppliers'),
     ]).then(([ing, prods, sups]) => {
       setIngredients(ing);
-      setProducts(prods);
+      setProducts(withQueuedProductEdits(prods));
       setSuppliers(sups);
     }).catch(err => console.error(err))
       .finally(() => setLoading(false));
@@ -161,18 +173,41 @@ export function InventoryPage() {
     }
   };
 
+  // A recipe saved here without the server shows instead, until it is sent
+  const offlineOps = useOfflineOps(st => st.ops);
+  const queuedLines = selectedProductId ? queuedRecipe(selectedProductId, offlineOps) : undefined;
+  const recipeQueued = !!queuedLines;
+  const recipe = queuedLines ? recipeFromLines(queuedLines, serverRecipe, ingredients) : serverRecipe;
+
   // Load recipe when product selected
   useEffect(() => {
     if (!selectedProductId) return;
-    api.get(`/products/${selectedProductId}/recipe`)
-      .then(res => {
-        const data = res.data.data || res.data;
-        setSelectedProduct(data);
+    // Remembered on the device, so recipes can be read and edited with the server off
+    cachedGet<ProductWithRecipe>(`/products/${selectedProductId}/recipe`)
+      .then(data => {
+        setSelectedProduct(withQueuedProductEdits([data])[0]);
         setRecipe(data?.recipeIngredients || []);
       })
       .catch(err => console.error(err))
       .finally(() => setRecipeLoading(false));
-  }, [selectedProductId]);
+    // Read again once this device's offline edit reaches the server
+  }, [selectedProductId, recipeQueued]);
+
+  // Remember every recipe on the device once per visit, so any of them opens with the server off
+  const recipesPrefetched = useRef(false);
+  useEffect(() => {
+    if (activeTab !== 'recipes' || products.length === 0 || recipesPrefetched.current) return;
+    recipesPrefetched.current = true;
+    void (async () => {
+      for (const p of products) {
+        try {
+          await cachedGet(`/products/${p.id}/recipe`);
+        } catch {
+          return;
+        }
+      }
+    })();
+  }, [activeTab, products]);
 
   const stockIngredients = showInactive && stockFilter === 'all' ? [...ingredients, ...inactiveIngredients] : ingredients;
   const filteredIngredients = stockIngredients.filter(i =>
@@ -288,20 +323,47 @@ export function InventoryPage() {
     setEditingRecipe(true);
   };
 
-  const saveRecipe = async () => {
-    if (!selectedProductId) return;
+  const saveRecipe = async (keepMine = false) => {
+    if (!selectedProductId || !selectedProduct) return;
     setRecipeSaving(true);
+    const validRows = editRecipeRows.filter(r => r.ingredientId && Number(r.quantityUsed) > 0);
+    const lines = validRows.map(r => ({ ingredientId: r.ingredientId, quantityUsed: Number(r.quantityUsed) }));
     try {
-      const validRows = editRecipeRows.filter(r => r.ingredientId && Number(r.quantityUsed) > 0);
-      const res = await api.put(`/products/${selectedProductId}/recipe`, {
-        ingredients: validRows.map(r => ({ ingredientId: r.ingredientId, quantityUsed: Number(r.quantityUsed) }))
-      });
-      const data = res.data.data || res.data;
-      setSelectedProduct(data);
-      setRecipe(data?.recipeIngredients || []);
+      // The recipe this device saw: if someone else changed it meanwhile, the server says so instead of overwriting it
+      const base = recipe.map(r => ({ ingredientId: r.ingredient.id, quantityUsed: Number(r.quantityUsed) }));
+      const sent = await sendOrQueue<ProductWithRecipe>(
+        `/products/${selectedProductId}/recipe`,
+        { ingredients: lines, ...(!keepMine && { base }) },
+        `Receta: ${selectedProduct.name}`,
+        'PUT'
+      );
+      if (sent.queued) {
+        toast.success(QUEUED_MESSAGE);
+      } else {
+        setSelectedProduct(sent.data);
+        setRecipe(sent.data?.recipeIngredients || []);
+      }
       setEditingRecipe(false);
     } catch (err) {
-      notifyError(err);
+      if (isEditConflict(err) && await confirm({
+        title: 'Alguien más cambió esta receta',
+        message: `${getErrorMessage(err)}\n\n¿Guardar la tuya encima?`,
+        confirmLabel: 'Guardar la mía',
+        cancelLabel: 'Ver la nueva',
+      })) {
+        await saveRecipe(true);
+        return;
+      }
+      if (isEditConflict(err)) {
+        setEditingRecipe(false);
+        setRecipeLoading(true);
+        cachedGet<ProductWithRecipe>(`/products/${selectedProductId}/recipe`)
+          .then(data => setRecipe(data?.recipeIngredients || []))
+          .catch(e => notifyError(e))
+          .finally(() => setRecipeLoading(false));
+      } else {
+        notifyError(err);
+      }
     } finally {
       setRecipeSaving(false);
     }
@@ -639,7 +701,7 @@ export function InventoryPage() {
                     {editingRecipe ? (
                       <div className="flex gap-2">
                         <button onClick={() => setEditingRecipe(false)} className="flex-1 py-2.5 rounded-xl border border-ink/10 text-ink/60 hover:text-ink text-sm font-medium flex items-center justify-center gap-1"><X className="w-4 h-4" /> Cancelar</button>
-                        <button onClick={saveRecipe} disabled={recipeSaving} className="flex-1 py-2.5 rounded-xl bg-cta-alt text-on-secondary font-bold text-sm flex items-center justify-center gap-1 disabled:opacity-50">
+                        <button onClick={() => saveRecipe()} disabled={recipeSaving} className="flex-1 py-2.5 rounded-xl bg-cta-alt text-on-secondary font-bold text-sm flex items-center justify-center gap-1 disabled:opacity-50">
                           {recipeSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4" /> Guardar</>}
                         </button>
                       </div>

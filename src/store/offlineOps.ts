@@ -10,6 +10,8 @@ export interface QueuedOp {
   /** Sent as Idempotency-Key, so the server records it once even if it arrives twice. */
   key: string;
   url: string;
+  /** POST when missing (queues saved before edits could be queued). */
+  method?: 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body: unknown;
   /** When it was really done; the server dates it with this. */
   occurredAt: string;

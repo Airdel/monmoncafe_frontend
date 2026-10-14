@@ -75,6 +75,8 @@ export interface ClosingPreview extends ClosingTotals {
   expenses: DayExpense[];
   /** Orders sent to the bar but not charged yet; they count on the day they are paid. */
   unpaidOrders?: { count: number; total: number };
+  /** Devices that last said they still have sales or records to send (older servers leave it out). */
+  devicesWithPending?: { name: string; pendingSales: number; pendingOps: number; lastSeenAt: string }[];
 }
 
 export interface DailyClosing extends ClosingTotals {

@@ -6,6 +6,8 @@ import { getErrorMessage } from '../lib/errors';
 import { confirm, notifyError, toast } from '../lib/dialogs';
 import { cachedGet, isOfflineError, QUEUED_MESSAGE, QUICK_TIMEOUT_MS, sendOrQueue } from '../lib/offline';
 import { useOfflineOps, type QueuedOp } from '../store/offlineOps';
+import { newClientId } from '../store/offlineSales';
+import { planShoppingList, plannedCost, planToolItems, type Priority } from '../lib/planner';
 import { formatMoney } from '../lib/format';
 import { unitLabel } from '../lib/modifiers';
 import { matchesSearch } from '../lib/search';
@@ -15,9 +17,7 @@ import { Modal } from '../components/ui/Modal';
 import { SearchInput } from '../components/ui/SearchInput';
 import { inputClass, labelClass, primaryButtonClass } from '../components/finance/styles';
 import { OtherPurchaseForm, type PlainExpense } from '../components/inventory/OtherPurchaseForm';
-import { EXPENSE_CATEGORIES, expenseCategoryLabel, toolCategory, type ExpenseCategory, type ToolCategory } from '../lib/tools';
-
-type Priority = 'ESSENTIAL' | 'IMPORTANT' | 'OPTIONAL';
+import { EXPENSE_CATEGORIES, expenseCategoryLabel, toolCategory, type ExpenseCategory, type Tool, type ToolCategory } from '../lib/tools';
 
 const PRIORITIES: { key: Priority; label: string; className: string }[] = [
   { key: 'ESSENTIAL', label: 'Esencial', className: 'bg-error/15 text-error border-error/30' },
@@ -28,6 +28,8 @@ const priorityInfo = (p: Priority) => PRIORITIES.find(x => x.key === p) ?? PRIOR
 
 type ListItem = {
   id: number;
+  /** Set when it was made on a device while the server was off. */
+  clientId?: string | null;
   /** An item is an insumo, a tool with missing pieces, or an extra written by hand. */
   ingredientId: number | null;
   toolId: number | null;
@@ -55,6 +57,7 @@ type Supplier = { id: number; name: string };
 
 type ShoppingList = {
   id: number;
+  clientId?: string | null;
   budget: string;
   createdAt: string;
   user: { name: string };
@@ -72,7 +75,107 @@ const itemSupplierId = (i: ListItem) => i.ingredient?.supplierId ?? i.tool?.supp
 const paidFor = (i: ListItem) => i.purchase
   ? { quantity: i.purchase.quantity, total: Number(i.purchase.totalCost) }
   : i.expense ? { quantity: i.expense.quantity ?? i.quantity, total: Number(i.expense.amount) } : null;
-const purchaseUrl = (itemId: number) => `/shopping-lists/items/${itemId}/purchase`;
+/** Lists and items made offline are known by their clientId until the server has them. */
+const itemRef = (i: { id: number; clientId?: string | null }) => i.clientId ?? i.id;
+const purchaseUrl = (ref: number | string) => `/shopping-lists/items/${ref}/purchase`;
+
+const LIST_CACHE_KEY = 'cache:/shopping-lists/current';
+
+/** Insumos as Inventario reads them, kept on the device. */
+type StockIngredient = {
+  id: number;
+  name: string;
+  unit: string;
+  priority?: Priority;
+  currentStock: string;
+  minStock: string;
+  maxStock?: string | null;
+  currentCostPerUnit: string;
+  supplierId?: number | null;
+  supplier?: { name: string } | null;
+};
+
+/**
+ * Plans a list on the device, like the server would, with the stock it
+ * knew last. Returns the list to show and what to send when the PC is back.
+ */
+async function planOffline(budget: number, current: ShoppingList | null, userName: string) {
+  let ingredients: StockIngredient[];
+  let tools: Tool[];
+  try {
+    [ingredients, tools] = await Promise.all([cachedGet<StockIngredient[]>('/inventory/ingredients'), cachedGet<Tool[]>('/tools')]);
+  } catch {
+    throw new Error('Sin conexión y sin copia del inventario en este dispositivo. Abre Inventario una vez con la PC prendida.');
+  }
+  const ingredientRows = planShoppingList(ingredients.map(i => ({
+    id: i.id,
+    unit: i.unit,
+    priority: i.priority ?? 'IMPORTANT',
+    currentStock: Number(i.currentStock),
+    minStock: Number(i.minStock),
+    maxStock: i.maxStock == null ? null : Number(i.maxStock),
+    costPerUnit: Number(i.currentCostPerUnit),
+  })), budget);
+  const toolRows = planToolItems(
+    tools.map(t => ({ id: t.id, quantity: t.quantity, idealQuantity: t.idealQuantity, unitCost: Number(t.unitCost) })),
+    budget - plannedCost(ingredientRows),
+    ingredientRows.length,
+  );
+  // Extras not bought yet carry over, as on the server
+  const extras = (current?.items ?? []).filter(i => i.description !== null && !i.purchased);
+  const first = ingredientRows.length + toolRows.length;
+
+  const planned = [
+    ...ingredientRows.map(r => ({ ...r, clientId: newClientId() })),
+    ...toolRows.map(r => ({ ...r, clientId: newClientId() })),
+    ...extras.map((e, i) => ({
+      clientId: newClientId(),
+      description: e.description!,
+      ...(e.expenseCategory && { expenseCategory: e.expenseCategory }),
+      priority: e.priority,
+      stock: 0,
+      minStock: 0,
+      quantity: Number(e.quantity),
+      unitCost: Number(e.unitCost),
+      inBudget: true,
+      partial: false,
+      sortOrder: first + i,
+    })),
+  ];
+  const listClientId = newClientId();
+  const list: ShoppingList = {
+    id: -Date.now(),
+    clientId: listClientId,
+    budget: String(budget),
+    createdAt: new Date().toISOString(),
+    user: { name: userName },
+    items: planned.map((row, i) => {
+      const ingredient = 'ingredientId' in row ? ingredients.find(x => x.id === row.ingredientId) : undefined;
+      const tool = 'toolId' in row ? tools.find(x => x.id === row.toolId) : undefined;
+      return {
+        id: -1 - i,
+        clientId: row.clientId,
+        ingredientId: ingredient?.id ?? null,
+        toolId: tool?.id ?? null,
+        description: 'description' in row ? row.description : null,
+        expenseCategory: 'expenseCategory' in row ? row.expenseCategory ?? null : null,
+        priority: row.priority,
+        stock: String(row.stock),
+        minStock: String(row.minStock),
+        quantity: String(row.quantity),
+        unitCost: String(row.unitCost),
+        inBudget: row.inBudget,
+        partial: row.partial,
+        purchased: false,
+        ingredient: ingredient ? { name: ingredient.name, unit: ingredient.unit, supplierId: ingredient.supplierId ?? null, supplier: ingredient.supplier ?? null } : null,
+        tool: tool ? { name: tool.name, category: tool.category, supplierId: tool.supplierId, supplier: tool.supplier } : null,
+        purchase: null,
+        expense: null,
+      };
+    }),
+  };
+  return { list, body: { budget, clientId: listClientId, items: planned } };
+}
 
 /** Shows as bought the items checked off on this device that are still waiting to be sent. */
 function withQueued(list: ShoppingList | null, ops: QueuedOp[]): ShoppingList | null {
@@ -80,7 +183,7 @@ function withQueued(list: ShoppingList | null, ops: QueuedOp[]): ShoppingList | 
   return {
     ...list,
     items: list.items.map(item => {
-      const op = !item.purchased && ops.find(o => !o.error && o.url === purchaseUrl(item.id));
+      const op = !item.purchased && ops.find(o => !o.error && (o.url === purchaseUrl(itemRef(item)) || o.url === purchaseUrl(item.id)));
       if (!op) return item;
       const body = op.body as { quantity: number; totalCost: number };
       return { ...item, purchased: true, queued: true, expense: { quantity: String(body.quantity), amount: String(body.totalCost), supplier: null } };
@@ -114,6 +217,7 @@ function BudgetForm({ onCreate, busy, initial = '' }: { onCreate: (budget: numbe
 
 export function ShoppingListPage() {
   const role = useAuthStore(state => state.user?.role);
+  const userName = useAuthStore(state => state.user?.name ?? '');
   const canManage = role === 'ADMIN' || role === 'SUPERVISOR';
   const [tab, setTab] = useState<'list' | 'priorities'>('list');
   const [loading, setLoading] = useState(true);
@@ -132,6 +236,18 @@ export function ShoppingListPage() {
 
   const loadList = () => cachedGet<ShoppingList | null>('/shopping-lists/current').then(setList);
 
+  // What is on screen is what this device opens next time without the server,
+  // including a list made or changed offline
+  const listLoaded = useRef(false);
+  useEffect(() => {
+    if (!listLoaded.current) return;
+    try {
+      localStorage.setItem(LIST_CACHE_KEY, JSON.stringify(serverList));
+    } catch {
+      // Storage full: it still works online
+    }
+  }, [serverList]);
+
   // Read again when what this device had waiting reaches the server
   const waiting = queuedOps.filter(o => !o.error).length;
   const lastWaiting = useRef(waiting);
@@ -143,6 +259,7 @@ export function ShoppingListPage() {
 
   useEffect(() => {
     loadList()
+      .then(() => { listLoaded.current = true; })
       .catch(err => setError(getErrorMessage(err)))
       .finally(() => setLoading(false));
     cachedGet<Supplier[]>('/suppliers')
@@ -151,11 +268,11 @@ export function ShoppingListPage() {
   }, []);
 
   const replaceItem = (item: ListItem) =>
-    setList(l => l && { ...l, items: l.items.map(i => i.id === item.id ? item : i) });
+    setList(l => l && { ...l, items: l.items.map(i => itemRef(i) === itemRef(item) ? item : i) });
 
   /** Checking off records what was bought: insumos go to the inventory, tools and extras to the day's expenses. */
   const purchaseItem = async (item: ListItem, body: { quantity: number; totalCost: number; supplierId?: number }) => {
-    const sent = await sendOrQueue(purchaseUrl(item.id), body, `Compré: ${itemName(item)} ${formatQty(body.quantity, itemUnit(item))} (${formatMoney(body.totalCost)})`);
+    const sent = await sendOrQueue(purchaseUrl(itemRef(item)), body, `Compré: ${itemName(item)} ${formatQty(body.quantity, itemUnit(item))} (${formatMoney(body.totalCost)})`);
     if (sent.queued) toast.success(QUEUED_MESSAGE);
     else await loadList().catch(notifyError);
     setBuying(null);
@@ -178,7 +295,7 @@ export function ShoppingListPage() {
       tone: paid ? 'danger' : 'primary',
     })) return;
     try {
-      await api.delete(`/shopping-lists/items/${item.id}/purchase`);
+      await api.delete(purchaseUrl(itemRef(item)));
       replaceItem({ ...item, purchased: false, purchase: null, expense: null });
     } catch (err) {
       notifyError(err);
@@ -188,8 +305,9 @@ export function ShoppingListPage() {
   /** Extras written by hand can be taken off the list. */
   const removeExtra = async (item: ListItem) => {
     try {
-      await api.delete(`/shopping-lists/items/${item.id}`);
-      setList(l => l && { ...l, items: l.items.filter(i => i.id !== item.id) });
+      const sent = await sendOrQueue(`/shopping-lists/items/${itemRef(item)}`, undefined, `Quitar de la lista: ${itemName(item)}`, 'DELETE');
+      if (sent.queued) toast.success(QUEUED_MESSAGE);
+      setList(l => l && { ...l, items: l.items.filter(i => itemRef(i) !== itemRef(item)) });
     } catch (err) {
       notifyError(err);
     }
@@ -198,7 +316,16 @@ export function ShoppingListPage() {
   const createList = async (budget: number) => {
     setCreating(true);
     try {
-      setList(unwrap<ShoppingList>(await api.post('/shopping-lists', { budget })));
+      try {
+        setList(unwrap<ShoppingList>(await api.post('/shopping-lists', { budget }, { timeout: QUICK_TIMEOUT_MS })));
+      } catch (err) {
+        if (!isOfflineError(err)) throw err;
+        // Planned here with the stock this device knew; the server takes it as is when it arrives
+        const planned = await planOffline(budget, list, userName);
+        const sent = await sendOrQueue<ShoppingList>('/shopping-lists', planned.body, `Lista nueva de ${formatMoney(budget)}`);
+        if (sent.queued) toast.success(`${QUEUED_MESSAGE} Se armó con el stock que este dispositivo conocía.`);
+        setList(sent.queued ? planned.list : sent.data);
+      }
       setShowNewList(false);
     } catch (err) {
       notifyError(err);
@@ -214,7 +341,8 @@ export function ShoppingListPage() {
       confirmLabel: 'Terminar lista',
     })) return;
     try {
-      await api.post(`/shopping-lists/${list.id}/close`);
+      const sent = await sendOrQueue(`/shopping-lists/${itemRef(list)}/close`, undefined, 'Terminar lista de compras');
+      if (sent.queued) toast.success(QUEUED_MESSAGE);
       setList(null);
     } catch (err) {
       notifyError(err);
@@ -227,7 +355,7 @@ export function ShoppingListPage() {
     const local: Partial<ListItem> = { ...flags, ...(quantity !== undefined && { quantity: String(quantity), partial: false }) };
     replaceItem({ ...item, ...local });
     try {
-      await api.patch(`/shopping-lists/items/${item.id}`, changes);
+      await sendOrQueue(`/shopping-lists/items/${itemRef(item)}`, changes, `Lista: ${itemName(item)}`, 'PATCH');
     } catch (err) {
       replaceItem(item);
       notifyError(err);
@@ -444,7 +572,7 @@ export function ShoppingListPage() {
 
       {showExtra && list && (
         <ExtraItemModal
-          listId={list.id}
+          listRef={itemRef(list)}
           suppliers={suppliers}
           canManage={canManage}
           onClose={() => setShowExtra(false)}
@@ -614,8 +742,8 @@ function PrioritiesTab({ canManage }: { canManage: boolean }) {
 }
 
 /** Something not in the system: bought already, or written down to buy later. */
-function ExtraItemModal({ listId, suppliers, canManage, onClose, onAdded, onBought }: {
-  listId: number;
+function ExtraItemModal({ listRef, suppliers, canManage, onClose, onAdded, onBought }: {
+  listRef: number | string;
   suppliers: Supplier[];
   canManage: boolean;
   onClose: () => void;
@@ -631,38 +759,56 @@ function ExtraItemModal({ listId, suppliers, canManage, onClose, onAdded, onBoug
   const valid = description.trim().length > 0 && Number(quantity) > 0 && Number(estimate || 0) >= 0;
 
   /**
-   * Bought already: it goes on the list checked off, so it can be unchecked
-   * like any other. With the server off it is kept as an expense of the day
-   * instead (the list item can't be made without the server). True if kept.
+   * Writes it on the list, now or (with the server off) when the PC is back.
+   * It carries its own clientId, so it can be checked off before it arrives.
    */
+  const addToList = async (fields: { description: string; quantity: number; estimatedCost: number; category: string }, label: string) => {
+    const clientId = newClientId();
+    const sent = await sendOrQueue<ListItem>(`/shopping-lists/${listRef}/extras`, { ...fields, clientId }, label);
+    if (!sent.queued) return { item: sent.data, queued: false };
+    const item: ListItem = {
+      id: -Date.now(),
+      clientId,
+      ingredientId: null,
+      toolId: null,
+      description: fields.description,
+      expenseCategory: fields.category,
+      priority: 'IMPORTANT',
+      stock: '0',
+      minStock: '0',
+      quantity: String(fields.quantity),
+      unitCost: String(fields.estimatedCost / fields.quantity),
+      inBudget: true,
+      partial: false,
+      purchased: false,
+      ingredient: null,
+      tool: null,
+      purchase: null,
+      expense: null,
+    };
+    return { item, queued: true };
+  };
+
+  /** Bought already: it goes on the list checked off, so it can be unchecked like any other. True if kept on the device. */
   const recordBought = async ({ description, quantity, amount, category, supplierId }: PlainExpense) => {
-    let item: ListItem;
-    try {
-      const res = await api.post(`/shopping-lists/${listId}/extras`, { description, quantity, estimatedCost: amount, category }, { timeout: QUICK_TIMEOUT_MS });
-      item = unwrap<ListItem>(res);
-    } catch (err) {
-      if (!isOfflineError(err)) throw err;
-      const sent = await sendOrQueue('/other-expenses', { description, quantity, amount, category, ...(supplierId && { supplierId }) }, `Gasto: ${description} (${formatMoney(amount)})`);
-      return sent.queued;
-    }
-    const sent = await sendOrQueue(purchaseUrl(item.id), { quantity, totalCost: amount, ...(supplierId && { supplierId }) }, `Compré: ${description} (${formatMoney(amount)})`);
-    return sent.queued;
+    const { item, queued } = await addToList({ description, quantity, estimatedCost: amount, category }, `Extra: ${description}`);
+    if (queued) onAdded(item);
+    const sent = await sendOrQueue(purchaseUrl(itemRef(item)), { quantity, totalCost: amount, ...(supplierId && { supplierId }) }, `Compré: ${description} (${formatMoney(amount)})`);
+    return queued || sent.queued;
   };
 
   const add = async () => {
     if (!valid) return;
     setSaving(true);
     try {
-      const sent = await sendOrQueue<ListItem>(`/shopping-lists/${listId}/extras`, {
+      const { item, queued } = await addToList({
         description: description.trim(),
         quantity: Number(quantity),
         estimatedCost: Math.round(Number(estimate || 0) * 100) / 100,
         category,
       }, `Apuntar para comprar: ${description.trim()}`);
-      if (sent.queued) {
-        toast.success(QUEUED_MESSAGE);
-        onClose();
-      } else onAdded(sent.data);
+      if (queued) toast.success(QUEUED_MESSAGE);
+      onAdded(item);
     } catch (err) {
       notifyError(err);
       setSaving(false);
