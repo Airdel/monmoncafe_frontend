@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ImagePlus, Loader2, Save, Trash2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { getErrorMessage } from '../../lib/errors';
-import { notifyError } from '../../lib/dialogs';
+import { confirm, notifyError, toast } from '../../lib/dialogs';
+import { cachedGet, isEditConflict, QUEUED_MESSAGE, sendOrQueue } from '../../lib/offline';
 import { productImageSrc, resizeImage } from '../../lib/images';
 import { unwrap } from '../../lib/unwrap';
 import { cn } from '../../lib/cn';
@@ -50,9 +51,8 @@ export function ProductEditModal({ product, onClose, onSaved }: {
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    api.get('/products/categories')
-      .then(res => {
-        const list = unwrap<Category[]>(res);
+    cachedGet<Category[]>('/products/categories')
+      .then(list => {
         setCategories(list);
         setCategoryId(current => current || list[0]?.id || 0);
       })
@@ -92,6 +92,33 @@ export function ProductEditModal({ product, onClose, onSaved }: {
   const priceValue = Number(price);
   const priceValid = price.trim() !== '' && Number.isFinite(priceValue) && priceValue >= 0;
 
+  /**
+   * Sends only what changed, with what this device saw before: if someone
+   * else changed the same field meanwhile, the server asks instead of
+   * overwriting it. Without the server it waits on the device.
+   */
+  const sendEdit = async (current: EditableProduct, fields: Omit<EditableProduct, 'id' | 'imageUrl' | 'category' | 'sellingPrice'> & { sellingPrice: number }, keepMine = false) => {
+    const before = { name: current.name, categoryId: current.categoryId, sellingPrice: Number(current.sellingPrice), isActive: current.isActive };
+    const changed = (Object.keys(before) as (keyof typeof before)[]).filter(k => fields[k] !== before[k]);
+    if (changed.length === 0) return { queued: false as const, data: current };
+    const body = {
+      ...Object.fromEntries(changed.map(k => [k, fields[k]])),
+      ...(!keepMine && { base: Object.fromEntries(changed.map(k => [k, before[k]])) }),
+    };
+    try {
+      return await sendOrQueue<EditableProduct>(`/products/${current.id}`, body, `Producto: ${current.name}`, 'PATCH');
+    } catch (err) {
+      if (keepMine || !isEditConflict(err)) throw err;
+      const ok = await confirm({
+        title: 'Alguien más cambió este producto',
+        message: `${getErrorMessage(err)}\n\n¿Guardar lo tuyo encima?`,
+        confirmLabel: 'Guardar lo mío',
+      });
+      if (!ok) throw err;
+      return sendEdit(current, fields, true);
+    }
+  };
+
   const save = async () => {
     setSaving(true);
     setError('');
@@ -104,9 +131,17 @@ export function ProductEditModal({ product, onClose, onSaved }: {
         sellingPrice: Math.round(priceValue * 100) / 100,
         isActive,
       };
-      saved = unwrap<EditableProduct>(product
-        ? await api.patch(`/products/${product.id}`, fields)
-        : await api.post('/products', fields));
+      if (product) {
+        const sent = await sendEdit(product, fields);
+        if (sent.queued) {
+          toast.success(photo !== undefined ? `${QUEUED_MESSAGE} La foto necesita conexión: cámbiala cuando vuelva.` : QUEUED_MESSAGE);
+          onSaved({ ...product, ...fields, sellingPrice: String(fields.sellingPrice) });
+          return;
+        }
+        saved = sent.data;
+      } else {
+        saved = unwrap<EditableProduct>(await api.post('/products', fields));
+      }
       if (photo) {
         const form = new FormData();
         form.append('image', photo, 'foto.jpg');

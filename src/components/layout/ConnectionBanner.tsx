@@ -43,7 +43,7 @@ export function ConnectionBanner() {
         {!online ? (
           <span className="flex items-center gap-2">
             <CloudOff className="w-4 h-4 text-warning shrink-0" />
-            <span><b className="text-warning">Sin conexión con el servidor.</b> Puedes seguir vendiendo y registrando compras{pending && <>; {pending} en este dispositivo</>}.</span>
+            <span><b className="text-warning">Sin conexión con el servidor.</b> Puedes seguir trabajando y se envía solo cuando vuelva{pending && <>; {pending} en este dispositivo</>}.</span>
           </span>
         ) : pending && (
           <span className="flex items-center gap-2">
@@ -62,6 +62,8 @@ export function ConnectionBanner() {
     </>
   );
 }
+
+const isClashingEdit = (op: QueuedOp) => !!op.body && typeof op.body === 'object' && 'base' in op.body;
 
 function FailedItems({ sales, ops, onClose }: { sales: QueuedSale[]; ops: QueuedOp[]; onClose: () => void }) {
   const discardSale = async (sale: QueuedSale) => {
@@ -86,10 +88,10 @@ function FailedItems({ sales, ops, onClose }: { sales: QueuedSale[]; ops: Queued
     if (ok) useOfflineOps.getState().remove(op.key);
   };
 
-  const actions = (onRetry: () => void, onDiscard: () => void, what: string) => (
+  const actions = (onRetry: () => void, onDiscard: () => void, what: string, retryLabel = 'Reintentar') => (
     <div className="flex gap-2 mt-3">
       <button onClick={onRetry} className="flex-1 py-2 rounded-lg bg-primary/15 text-primary font-semibold flex items-center justify-center gap-1.5">
-        <RotateCcw className="w-4 h-4" /> Reintentar
+        <RotateCcw className="w-4 h-4" /> {retryLabel}
       </button>
       <button onClick={onDiscard} className="px-3 py-2 rounded-lg text-error hover:bg-error/10 flex items-center gap-1.5" aria-label={`Descartar ${what}`}>
         <Trash2 className="w-4 h-4" /> Descartar
@@ -120,7 +122,8 @@ function FailedItems({ sales, ops, onClose }: { sales: QueuedSale[]; ops: Queued
             <span className="text-ink/50 text-xs">{when(op.occurredAt)} · {op.user}</span>
             <p className="text-ink text-sm mt-1">{op.label}</p>
             <p className="text-error text-sm mt-1">{op.error}</p>
-            {actions(() => retryOfflineOp(op.key), () => discardOp(op), 'registro')}
+            {/* An edit that clashed with someone else's: retrying keeps this one */}
+            {actions(() => retryOfflineOp(op.key), () => discardOp(op), 'registro', isClashingEdit(op) ? 'Dejar el mío' : undefined)}
           </li>
         ))}
       </ul>
