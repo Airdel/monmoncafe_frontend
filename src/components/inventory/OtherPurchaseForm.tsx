@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Check, Loader2, Receipt } from 'lucide-react';
-import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';
-import { unwrap } from '../../lib/unwrap';
 import { notifyError, toast } from '../../lib/dialogs';
 import { formatMoney } from '../../lib/format';
+import { cachedGet, QUEUED_MESSAGE, sendOrQueue } from '../../lib/offline';
 import { EXPENSE_CATEGORIES, TOOL_CATEGORIES, type ExpenseCategory, type Tool, type ToolCategory } from '../../lib/tools';
 
 interface SupplierRef { id: number; name: string }
@@ -36,7 +35,8 @@ export function OtherPurchaseForm({ mode, suppliers, canManage, initialDescripti
   initialDescription?: string;
   onDone?: () => void;
   /** Records a one-off expense another way (the shopping list adds it as a checked item). */
-  recordPlain?: (expense: PlainExpense) => Promise<void>;
+  /** Resolves true when it was kept on the device to send later. */
+  recordPlain?: (expense: PlainExpense) => Promise<boolean>;
 }) {
   const [tools, setTools] = useState<Tool[]>([]);
   const [toolId, setToolId] = useState('');
@@ -52,7 +52,7 @@ export function OtherPurchaseForm({ mode, suppliers, canManage, initialDescripti
 
   useEffect(() => {
     if (mode !== 'tool') return;
-    api.get('/tools').then(res => setTools(unwrap<Tool[]>(res))).catch(err => notifyError(err));
+    cachedGet<Tool[]>('/tools').then(setTools).catch(err => notifyError(err));
   }, [mode]);
 
   const tool = tools.find(t => t.id === Number(toolId));
@@ -86,21 +86,22 @@ export function OtherPurchaseForm({ mode, suppliers, canManage, initialDescripti
     };
     try {
       if (mode === 'tool' && tool) {
-        await api.post(`/tools/${tool.id}/purchase`, { ...common, totalCost: Math.round(cost * 100) / 100 });
-        toast.success(`${tool.name}: +${qty}. Cuenta como gasto de hoy.`);
+        const sent = await sendOrQueue(`/tools/${tool.id}/purchase`, { ...common, totalCost: Math.round(cost * 100) / 100 }, `Compra de herramienta: ${tool.name} +${qty} (${formatMoney(cost)})`);
+        if (sent.queued) toast.success(QUEUED_MESSAGE);
+        else toast.success(`${tool.name}: +${qty}. Cuenta como gasto de hoy.`);
       } else if (saveAs === 'NO' && recordPlain) {
-        await recordPlain({ ...common, description: description.trim(), amount: Math.round(cost * 100) / 100, category });
-        toast.success(`${description.trim()} registrado como gasto de hoy`);
+        const queued = await recordPlain({ ...common, description: description.trim(), amount: Math.round(cost * 100) / 100, category });
+        toast.success(queued ? QUEUED_MESSAGE : `${description.trim()} registrado como gasto de hoy`);
       } else {
-        await api.post('/other-expenses', {
+        const sent = await sendOrQueue('/other-expenses', {
           ...common,
           description: description.trim(),
           amount: Math.round(cost * 100) / 100,
           category,
           ...(saveAs !== 'NO' && { saveAs }),
           ...(saveAs === 'TOOL' && { toolCategory }),
-        });
-        toast.success(saveAs === 'TOOL' ? `${description.trim()} se agregó a Herramientas`
+        }, `Gasto: ${description.trim()} (${formatMoney(cost)})`);
+        toast.success(sent.queued ? QUEUED_MESSAGE : saveAs === 'TOOL' ? `${description.trim()} se agregó a Herramientas`
           : saveAs === 'INGREDIENT' ? `${description.trim()} se agregó como insumo`
           : `${description.trim()} registrado como gasto de hoy`);
       }

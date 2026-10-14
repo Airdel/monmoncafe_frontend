@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, CheckCircle2, Trash2, ListChecks, Loader2, Minus, Package, Pencil, Plus, RotateCcw, Star, Wallet } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { getErrorMessage } from '../lib/errors';
-import { confirm, notifyError } from '../lib/dialogs';
+import { confirm, notifyError, toast } from '../lib/dialogs';
+import { cachedGet, isOfflineError, QUEUED_MESSAGE, QUICK_TIMEOUT_MS, sendOrQueue } from '../lib/offline';
+import { useOfflineOps, type QueuedOp } from '../store/offlineOps';
 import { formatMoney } from '../lib/format';
 import { unitLabel } from '../lib/modifiers';
 import { matchesSearch } from '../lib/search';
@@ -45,6 +47,8 @@ type ListItem = {
   purchase: { quantity: string; totalCost: string; unitCost: string; supplier: { name: string } | null } | null;
   /** …or, for tools and extras, the expense of the day. */
   expense: { quantity: string | null; amount: string; supplier: { name: string } | null } | null;
+  /** Checked off on this device while the server was off; not sent yet. */
+  queued?: boolean;
 };
 
 type Supplier = { id: number; name: string };
@@ -68,6 +72,22 @@ const itemSupplierId = (i: ListItem) => i.ingredient?.supplierId ?? i.tool?.supp
 const paidFor = (i: ListItem) => i.purchase
   ? { quantity: i.purchase.quantity, total: Number(i.purchase.totalCost) }
   : i.expense ? { quantity: i.expense.quantity ?? i.quantity, total: Number(i.expense.amount) } : null;
+const purchaseUrl = (itemId: number) => `/shopping-lists/items/${itemId}/purchase`;
+
+/** Shows as bought the items checked off on this device that are still waiting to be sent. */
+function withQueued(list: ShoppingList | null, ops: QueuedOp[]): ShoppingList | null {
+  if (!list) return list;
+  return {
+    ...list,
+    items: list.items.map(item => {
+      const op = !item.purchased && ops.find(o => !o.error && o.url === purchaseUrl(item.id));
+      if (!op) return item;
+      const body = op.body as { quantity: number; totalCost: number };
+      return { ...item, purchased: true, queued: true, expense: { quantity: String(body.quantity), amount: String(body.totalCost), supplier: null } };
+    }),
+  };
+}
+
 const formatQty = (qty: string | number, unit: string) =>
   `${Number(qty).toLocaleString('es-MX', { maximumFractionDigits: 2 })} ${unitLabel(unit)}`;
 
@@ -96,7 +116,6 @@ export function ShoppingListPage() {
   const role = useAuthStore(state => state.user?.role);
   const canManage = role === 'ADMIN' || role === 'SUPERVISOR';
   const [tab, setTab] = useState<'list' | 'priorities'>('list');
-  const [list, setList] = useState<ShoppingList | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
@@ -107,14 +126,27 @@ export function ShoppingListPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [showExtra, setShowExtra] = useState(false);
 
-  const loadList = () => api.get('/shopping-lists/current').then(res => setList(unwrap<ShoppingList | null>(res)));
+  const queuedOps = useOfflineOps(state => state.ops);
+  const [serverList, setList] = useState<ShoppingList | null>(null);
+  const list = withQueued(serverList, queuedOps);
+
+  const loadList = () => cachedGet<ShoppingList | null>('/shopping-lists/current').then(setList);
+
+  // Read again when what this device had waiting reaches the server
+  const waiting = queuedOps.filter(o => !o.error).length;
+  const lastWaiting = useRef(waiting);
+  useEffect(() => {
+    if (waiting < lastWaiting.current) loadList().catch(() => undefined);
+    lastWaiting.current = waiting;
+  }, [waiting]);
+
 
   useEffect(() => {
     loadList()
       .catch(err => setError(getErrorMessage(err)))
       .finally(() => setLoading(false));
-    api.get('/suppliers')
-      .then(res => setSuppliers(unwrap<Supplier[]>(res)))
+    cachedGet<Supplier[]>('/suppliers')
+      .then(setSuppliers)
       .catch(() => setSuppliers([]));
   }, []);
 
@@ -123,13 +155,18 @@ export function ShoppingListPage() {
 
   /** Checking off records what was bought: insumos go to the inventory, tools and extras to the day's expenses. */
   const purchaseItem = async (item: ListItem, body: { quantity: number; totalCost: number; supplierId?: number }) => {
-    await api.post(`/shopping-lists/items/${item.id}/purchase`, body);
-    await loadList().catch(notifyError);
+    const sent = await sendOrQueue(purchaseUrl(item.id), body, `Compré: ${itemName(item)} ${formatQty(body.quantity, itemUnit(item))} (${formatMoney(body.totalCost)})`);
+    if (sent.queued) toast.success(QUEUED_MESSAGE);
+    else await loadList().catch(notifyError);
     setBuying(null);
   };
 
   /** Unchecking takes the purchase back out of the inventory or the day's expenses. */
   const undoPurchase = async (item: ListItem) => {
+    if (item.queued) {
+      toast.info('Todavía no se envía al servidor. Podrás desmarcarlo cuando haya conexión.');
+      return;
+    }
     const paid = paidFor(item);
     if (!await confirm({
       title: `¿Desmarcar ${itemName(item)}?`,
@@ -593,24 +630,39 @@ function ExtraItemModal({ listId, suppliers, canManage, onClose, onAdded, onBoug
   const [saving, setSaving] = useState(false);
   const valid = description.trim().length > 0 && Number(quantity) > 0 && Number(estimate || 0) >= 0;
 
-  /** Bought already: it goes on the list checked off, so it can be unchecked like any other. */
+  /**
+   * Bought already: it goes on the list checked off, so it can be unchecked
+   * like any other. With the server off it is kept as an expense of the day
+   * instead (the list item can't be made without the server). True if kept.
+   */
   const recordBought = async ({ description, quantity, amount, category, supplierId }: PlainExpense) => {
-    const res = await api.post(`/shopping-lists/${listId}/extras`, { description, quantity, estimatedCost: amount, category });
-    const item = unwrap<ListItem>(res);
-    await api.post(`/shopping-lists/items/${item.id}/purchase`, { quantity, totalCost: amount, ...(supplierId && { supplierId }) });
+    let item: ListItem;
+    try {
+      const res = await api.post(`/shopping-lists/${listId}/extras`, { description, quantity, estimatedCost: amount, category }, { timeout: QUICK_TIMEOUT_MS });
+      item = unwrap<ListItem>(res);
+    } catch (err) {
+      if (!isOfflineError(err)) throw err;
+      const sent = await sendOrQueue('/other-expenses', { description, quantity, amount, category, ...(supplierId && { supplierId }) }, `Gasto: ${description} (${formatMoney(amount)})`);
+      return sent.queued;
+    }
+    const sent = await sendOrQueue(purchaseUrl(item.id), { quantity, totalCost: amount, ...(supplierId && { supplierId }) }, `Compré: ${description} (${formatMoney(amount)})`);
+    return sent.queued;
   };
 
   const add = async () => {
     if (!valid) return;
     setSaving(true);
     try {
-      const res = await api.post(`/shopping-lists/${listId}/extras`, {
+      const sent = await sendOrQueue<ListItem>(`/shopping-lists/${listId}/extras`, {
         description: description.trim(),
         quantity: Number(quantity),
         estimatedCost: Math.round(Number(estimate || 0) * 100) / 100,
         category,
-      });
-      onAdded(unwrap<ListItem>(res));
+      }, `Apuntar para comprar: ${description.trim()}`);
+      if (sent.queued) {
+        toast.success(QUEUED_MESSAGE);
+        onClose();
+      } else onAdded(sent.data);
     } catch (err) {
       notifyError(err);
       setSaving(false);
