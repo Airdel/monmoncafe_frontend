@@ -4,7 +4,8 @@ import { unwrap } from './unwrap';
 import { getErrorMessage } from './errors';
 import { useAuthStore } from '../store/auth';
 import { useConnectionStore } from '../store/connection';
-import { useOfflineSales } from '../store/offlineSales';
+import { newClientId, useOfflineSales } from '../store/offlineSales';
+import { useOfflineOps } from '../store/offlineOps';
 
 /** How long to wait for the PC before treating it as off (a dead Tailscale peer never answers). */
 export const QUICK_TIMEOUT_MS = 8000;
@@ -77,10 +78,77 @@ export async function syncOfflineSales(): Promise<void> {
   }
 }
 
+/** The server is still recording an earlier copy of the same request: try again later. */
+const isStillRecording = (err: unknown) => isAxiosError(err) && err.response?.status === 409;
+
+/** Told to people when something was kept on the device instead of sent. */
+export const QUEUED_MESSAGE = 'Sin conexión: quedó guardado en este dispositivo y se enviará solo.';
+
+export type SendResult<T> = { queued: false; data: T } | { queued: true };
+
+/**
+ * POST that works with the server off: it is sent right away when the PC
+ * answers, and otherwise kept on the device and sent later, dated with the
+ * moment it was made. The same Idempotency-Key goes with both tries, so a
+ * request that did arrive but whose answer was lost is not recorded twice.
+ */
+export async function sendOrQueue<T = unknown>(url: string, body: unknown, label: string): Promise<SendResult<T>> {
+  const key = newClientId();
+  const occurredAt = new Date().toISOString();
+  try {
+    const res = await api.post(url, body, { timeout: QUICK_TIMEOUT_MS, headers: { 'Idempotency-Key': key } });
+    return { queued: false, data: unwrap<T>(res) };
+  } catch (err) {
+    if (!isOfflineError(err)) throw err;
+    useOfflineOps.getState().add({ key, url, body, occurredAt, label, user: useAuthStore.getState().user?.name ?? '' });
+    return { queued: true };
+  }
+}
+
+let syncingOps = false;
+
+/** Sends what was registered offline, oldest first, after the sales. */
+export async function syncOfflineOps(): Promise<void> {
+  if (syncingOps || !useAuthStore.getState().accessToken) return;
+  syncingOps = true;
+  try {
+    for (const { key } of useOfflineOps.getState().ops) {
+      const op = useOfflineOps.getState().ops.find(o => o.key === key);
+      if (!op || op.error) continue;
+      try {
+        await api.post(op.url, op.body, {
+          timeout: QUICK_TIMEOUT_MS * 2,
+          headers: { 'Idempotency-Key': op.key, 'X-Occurred-At': op.occurredAt },
+        });
+        useOfflineOps.getState().remove(key);
+      } catch (err) {
+        if (isOfflineError(err) || isStillRecording(err)) return;
+        if (!useAuthStore.getState().accessToken) return;
+        useOfflineOps.getState().update(key, o => ({ ...o, error: getErrorMessage(err) }));
+      }
+    }
+  } finally {
+    syncingOps = false;
+  }
+}
+
+/** Sends sales first: what they used is already counted when purchases and counts arrive. */
+export async function syncAll(): Promise<void> {
+  await syncOfflineSales();
+  // Still unreachable: the rest waits too
+  if (useOfflineSales.getState().sales.some(s => !s.error)) return;
+  await syncOfflineOps();
+}
+
+export function retryOfflineOp(key: string) {
+  useOfflineOps.getState().update(key, op => ({ ...op, error: undefined }));
+  void syncAll();
+}
+
 /** Retries a sale the server refused, after fixing whatever it complained about. */
 export function retryOfflineSale(clientId: string) {
   useOfflineSales.getState().update(clientId, sale => ({ ...sale, error: undefined }));
-  void syncOfflineSales();
+  void syncAll();
 }
 
 async function ping() {
@@ -98,16 +166,17 @@ async function ping() {
 export function startOfflineSync(): () => void {
   const tick = async () => {
     const offline = !useConnectionStore.getState().online;
-    const pending = useOfflineSales.getState().sales.some(s => !s.error);
+    const pending = useOfflineSales.getState().sales.some(s => !s.error)
+      || useOfflineOps.getState().ops.some(o => !o.error);
     if (offline) await ping();
-    if (pending && useConnectionStore.getState().online) await syncOfflineSales();
+    if (pending && useConnectionStore.getState().online) await syncAll();
   };
   const timer = setInterval(tick, PING_EVERY_MS);
   const onBack = () => void tick();
   window.addEventListener('online', onBack);
   // The server answering anything means it is back: send right away
   const unsubscribe = useConnectionStore.subscribe((state, prev) => {
-    if (state.online && !prev.online) void syncOfflineSales();
+    if (state.online && !prev.online) void syncAll();
   });
   void tick();
   return () => {

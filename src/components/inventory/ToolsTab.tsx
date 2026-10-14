@@ -6,6 +6,7 @@ import { unwrap } from '../../lib/unwrap';
 import { confirm, notifyError, toast } from '../../lib/dialogs';
 import { formatMoney } from '../../lib/format';
 import { matchesSearch } from '../../lib/search';
+import { cachedGet, QUEUED_MESSAGE, sendOrQueue } from '../../lib/offline';
 import { LOSS_REASONS, TOOL_CATEGORIES, lossText, shortDate, toolCategory, type LossReason, type Tool, type ToolCategory, type ToolMovementReason } from '../../lib/tools';
 import { Modal } from '../ui/Modal';
 import { SearchInput } from '../ui/SearchInput';
@@ -34,8 +35,8 @@ export function ToolsTab({ suppliers, canManage }: { suppliers: SupplierRef[]; c
 
   useEffect(() => {
     let cancelled = false;
-    api.get('/tools', { params: { includeInactive: showInactive || undefined } })
-      .then(res => { if (!cancelled) setTools(unwrap<Tool[]>(res)); })
+    cachedGet<Tool[]>(showInactive ? '/tools?includeInactive=true' : '/tools')
+      .then(data => { if (!cancelled) setTools(data); })
       .catch(err => notifyError(err))
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -156,7 +157,12 @@ export function ToolsTab({ suppliers, canManage }: { suppliers: SupplierRef[]; c
       </p>
 
       {form && <ToolFormModal tool={form === 'new' ? null : form} suppliers={suppliers} onClose={() => setForm(null)} onSaved={() => { setForm(null); reload(); }} />}
-      {losing && <LossModal tool={losing} onClose={() => setLosing(null)} onSaved={() => { setLosing(null); reload(); }} />}
+      {losing && <LossModal tool={losing} onClose={() => setLosing(null)} onSaved={queuedLoss => {
+        setLosing(null);
+        // Kept on the device: show it already taken out until the server has it
+        if (queuedLoss) setTools(ts => ts.map(t => t.id === losing.id ? { ...t, quantity: t.quantity - queuedLoss } : t));
+        else reload();
+      }} />}
       {history && <HistoryModal tool={history} onClose={() => setHistory(null)} onEdit={canManage ? () => { setForm(history); setHistory(null); } : undefined} />}
       {counting && <CountModal tools={active} onClose={() => setCounting(false)} onSaved={() => { setCounting(false); reload(); }} />}
     </div>
@@ -275,7 +281,7 @@ function ToolFormModal({ tool, suppliers, onClose, onSaved }: { tool: Tool | nul
   );
 }
 
-function LossModal({ tool, onClose, onSaved }: { tool: Tool; onClose: () => void; onSaved: () => void }) {
+function LossModal({ tool, onClose, onSaved }: { tool: Tool; onClose: () => void; onSaved: (queuedLoss?: number) => void }) {
   const [reason, setReason] = useState<LossReason>('BROKEN');
   const [quantity, setQuantity] = useState('1');
   const [notes, setNotes] = useState('');
@@ -289,7 +295,12 @@ function LossModal({ tool, onClose, onSaved }: { tool: Tool; onClose: () => void
     if (!valid) return;
     setSaving(true);
     try {
-      await api.post(`/tools/${tool.id}/loss`, { quantity: qty, reason, notes: notes.trim() || undefined });
+      const sent = await sendOrQueue(`/tools/${tool.id}/loss`, { quantity: qty, reason, notes: notes.trim() || undefined }, `${tool.name}: ${lossText(reason, qty)}`);
+      if (sent.queued) {
+        toast.success(QUEUED_MESSAGE);
+        onSaved(qty);
+        return;
+      }
       toast.success(short > 0 ? `${lossText(reason, qty)}. Se agregó a la lista de compras.` : lossText(reason, qty));
       onSaved();
     } catch (err) {

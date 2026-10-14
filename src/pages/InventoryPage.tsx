@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { AlertTriangle, CheckCircle2, SlidersHorizontal, Coffee, Loader2, ShoppingCart, Package, ChevronDown, ChevronLeft, ChevronRight, Plus, Send, X, Save, Trash2, ArrowUpDown, Layers, Store, Tags, Pencil, EyeOff, Power, Wrench, type LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { unwrap } from '../lib/unwrap';
-import { notifyError } from '../lib/dialogs';
+import { notifyError, toast } from '../lib/dialogs';
+import { cachedGet, QUEUED_MESSAGE, sendOrQueue } from '../lib/offline';
 import { useAuthStore } from '../store/auth';
 import { Modal } from '../components/ui/Modal';
 import { ModifiersTab } from '../components/inventory/ModifiersTab';
@@ -121,14 +122,15 @@ export function InventoryPage() {
   const [purchaseKind, setPurchaseKind] = useState<'ingredient' | 'tool' | 'other'>('ingredient');
 
   const loadAll = () =>
+    // Remembered on the device, so purchases and counts can be registered with the server off
     Promise.all([
-      api.get('/inventory/ingredients'),
-      api.get('/products'),
-      api.get('/suppliers'),
-    ]).then(([ingRes, prodRes, supRes]) => {
-      setIngredients(ingRes.data.data || ingRes.data);
-      setProducts(prodRes.data.data || prodRes.data);
-      setSuppliers(supRes.data.data || supRes.data);
+      cachedGet<Ingredient[]>('/inventory/ingredients'),
+      cachedGet<Product[]>('/products'),
+      cachedGet<Supplier[]>('/suppliers'),
+    ]).then(([ing, prods, sups]) => {
+      setIngredients(ing);
+      setProducts(prods);
+      setSuppliers(sups);
     }).catch(err => console.error(err))
       .finally(() => setLoading(false));
 
@@ -204,18 +206,24 @@ export function InventoryPage() {
     setPurchaseSubmitting(true);
     setPurchaseSuccess('');
     try {
-      await api.post('/purchases', {
+      const ingredient = ingredients.find(i => i.id === purchaseForm.ingredientId);
+      const quantity = Number(purchaseForm.quantity);
+      const sent = await sendOrQueue('/purchases', {
         ingredientId: purchaseForm.ingredientId,
         supplierId: purchaseForm.supplierId,
-        quantity: Number(purchaseForm.quantity),
+        quantity,
         totalCost: Number(purchaseForm.totalCost),
         notes: purchaseForm.notes || undefined,
-      });
-      setPurchaseSuccess('¡Compra registrada! Stock actualizado.');
+      }, `Compra: ${ingredient?.name ?? 'insumo'} ${quantity} ${ingredient ? unitLabel(ingredient.unit) : ''} ($${Number(purchaseForm.totalCost).toFixed(2)})`);
       setPurchaseForm({ ingredientId: 0, supplierId: 0, quantity: '', totalCost: '', notes: '' });
+      if (sent.queued) {
+        setPurchaseSuccess(QUEUED_MESSAGE);
+        setIngredients(prev => prev.map(i => i.id === ingredient?.id ? { ...i, currentStock: String(Number(i.currentStock) + quantity) } : i));
+        return;
+      }
+      setPurchaseSuccess('¡Compra registrada! Stock actualizado.');
       // Refresh ingredients
-      const res = await api.get('/inventory/ingredients');
-      setIngredients(res.data.data || res.data);
+      setIngredients(await cachedGet<Ingredient[]>('/inventory/ingredients'));
     } catch (err) {
       notifyError(err);
     } finally {
@@ -228,15 +236,28 @@ export function InventoryPage() {
     if (!adjustModal || !adjustQty) return;
     setAdjustSubmitting(true);
     try {
-      await api.post('/inventory/movements', {
+      const quantity = Number(adjustQty);
+      const kind = adjustType === 'IN' ? 'Entrada' : adjustType === 'OUT' ? 'Salida' : 'Conteo';
+      const sent = await sendOrQueue('/inventory/movements', {
         ingredientId: adjustModal.id,
         type: adjustType,
-        quantity: Number(adjustQty),
+        quantity,
         reason: adjustReason || `${adjustType === 'IN' ? 'Entrada' : adjustType === 'OUT' ? 'Salida' : 'Ajuste'} manual`,
-      });
+      }, `${kind}: ${adjustModal.name} ${quantity} ${unitLabel(adjustModal.unit)}`);
+      const id = adjustModal.id;
       setAdjustModal(null); setAdjustQty(''); setAdjustReason('');
-      const res = await api.get('/inventory/ingredients');
-      setIngredients(res.data.data || res.data);
+      if (sent.queued) {
+        toast.success(QUEUED_MESSAGE);
+        // Shown right away; the server applies it with what moved since when it arrives
+        setIngredients(prev => prev.map(i => {
+          if (i.id !== id) return i;
+          const stock = Number(i.currentStock);
+          const next = adjustType === 'IN' ? stock + quantity : adjustType === 'OUT' ? stock - quantity : quantity;
+          return { ...i, currentStock: String(next) };
+        }));
+        return;
+      }
+      setIngredients(await cachedGet<Ingredient[]>('/inventory/ingredients'));
     } catch (err) {
       notifyError(err);
     } finally {
