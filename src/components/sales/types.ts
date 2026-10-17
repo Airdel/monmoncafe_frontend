@@ -9,6 +9,8 @@ export interface SaleRowItem {
   subtotal: number;
   discount: number;
   cost: number;
+  /** Sold for a supplier: not part of the shop's sales (older servers leave it out). */
+  isConsignment?: boolean;
   modifiers: string[];
   modifierOptionIds: number[];
 }
@@ -34,6 +36,8 @@ export interface SaleRow {
   /** Part of a saved corte de caja; it has to be reopened to correct the sale. */
   inClosing: boolean;
   cost: number;
+  /** Part of the total owed to the supplier of consignment products. */
+  consignmentAmount?: number;
   items: SaleRowItem[];
   consumption: Consumption[];
 }

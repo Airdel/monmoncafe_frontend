@@ -80,6 +80,7 @@ export function ClosingTab({ onClosed, canManage }: { onClosed: () => void; canM
       details: preview ? [
         { label: 'Ventas', value: formatMoney(preview.totalSales) },
         { label: 'Utilidad neta', value: formatMoney(preview.netProfit) },
+        ...(Number(preview.consignmentSales ?? 0) > 0 ? [{ label: 'Para el proveedor', value: formatMoney(preview.consignmentSales ?? 0) }] : []),
       ] : undefined,
       confirmLabel: 'Cerrar día',
     });
@@ -168,6 +169,7 @@ export function ClosingTab({ onClosed, canManage }: { onClosed: () => void; canM
             totals={preview}
             details={preview.details}
             expenses={preview.expenses}
+            consignment={preview.consignment}
             onDeleteExpense={canManage && !preview.alreadyClosed ? deleteExpense : undefined}
           />
 
