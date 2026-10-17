@@ -1,19 +1,21 @@
-import { Banknote, ArrowLeftRight, Receipt, Tag, Trash2 } from 'lucide-react';
+import { Banknote, ArrowLeftRight, Receipt, Store, Tag, Trash2 } from 'lucide-react';
 import { formatMoney } from '../../lib/format';
 import { expenseCategoryLabel } from '../../lib/tools';
-import type { ClosingDetail, ClosingTotals, DayExpense } from './types';
+import type { ClosingDetail, ClosingTotals, ConsignmentRow, DayExpense } from './types';
 import { StatCard } from './ui';
 
 /** KPI grid + the day's other expenses + ingredient replenishment table, shared by the live preview and stored closings. */
-export function ClosingBreakdown({ totals, details, expenses = [], onDeleteExpense }: {
+export function ClosingBreakdown({ totals, details, expenses = [], consignment = [], onDeleteExpense }: {
   totals: ClosingTotals;
   details: ClosingDetail[];
   expenses?: DayExpense[];
+  consignment?: ConsignmentRow[];
   /** Only while the day is open. */
   onDeleteExpense?: (expense: DayExpense) => void;
 }) {
   const netProfit = Number(totals.netProfit);
   const otherExpenses = Number(totals.otherExpenses ?? 0);
+  const consignmentSales = Number(totals.consignmentSales ?? 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -33,6 +35,29 @@ export function ClosingBreakdown({ totals, details, expenses = [], onDeleteExpen
         <MiniStat icon={Tag} label="Descuentos" value={formatMoney(totals.totalDiscount)} />
         <MiniStat icon={Receipt} label="Tickets" value={String(totals.totalTransactions)} />
       </div>
+
+      {consignmentSales > 0 && (
+        <div className="glass-panel p-5">
+          <div className="flex items-start gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-secondary/15"><Store className="w-4 h-4 text-secondary" /></div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-headline text-lg font-bold text-ink">Por entregar al proveedor</h3>
+              <p className="text-ink/40 text-xs">Productos a consignación. El dinero está en efectivo y transferencias, pero no es venta de la cafetería.</p>
+            </div>
+            <p className="font-headline text-xl font-bold text-secondary shrink-0">{formatMoney(consignmentSales)}</p>
+          </div>
+          {consignment.length > 0 && (
+            <div className="divide-y divide-ink/5 mt-3">
+              {consignment.map(c => (
+                <div key={c.productId} className="py-2 flex items-center gap-3 text-sm">
+                  <p className="flex-1 min-w-0 text-ink truncate">{c.quantity}× {c.name}</p>
+                  <p className="text-ink/80 shrink-0">{formatMoney(c.amount)}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {expenses.length > 0 && (
         <div className="glass-panel p-5">

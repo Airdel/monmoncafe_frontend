@@ -15,6 +15,8 @@ export interface EditableProduct {
   categoryId: number;
   sellingPrice: string;
   isActive: boolean;
+  /** Sold for a supplier: counts in inventory, not in the shop's sales (older servers leave it out). */
+  isConsignment?: boolean;
   imageUrl?: string | null;
   category?: { id?: number; name: string };
 }
@@ -42,6 +44,7 @@ export function ProductEditModal({ product, onClose, onSaved }: {
   const [categoryId, setCategoryId] = useState(product?.categoryId ?? 0);
   const [price, setPrice] = useState(product ? String(Number(product.sellingPrice)) : '');
   const [isActive, setIsActive] = useState(product?.isActive ?? true);
+  const [isConsignment, setIsConsignment] = useState(product?.isConsignment ?? false);
   // undefined = keep current photo, null = remove it, Blob = upload this one
   const [photo, setPhoto] = useState<Blob | null | undefined>(undefined);
   const [photoPreview, setPhotoPreview] = useState<string | null>(productImageSrc(product?.imageUrl));
@@ -97,8 +100,8 @@ export function ProductEditModal({ product, onClose, onSaved }: {
    * else changed the same field meanwhile, the server asks instead of
    * overwriting it. Without the server it waits on the device.
    */
-  const sendEdit = async (current: EditableProduct, fields: Omit<EditableProduct, 'id' | 'imageUrl' | 'category' | 'sellingPrice'> & { sellingPrice: number }, keepMine = false) => {
-    const before = { name: current.name, categoryId: current.categoryId, sellingPrice: Number(current.sellingPrice), isActive: current.isActive };
+  const sendEdit = async (current: EditableProduct, fields: Omit<EditableProduct, 'id' | 'imageUrl' | 'category' | 'sellingPrice' | 'isConsignment'> & { sellingPrice: number; isConsignment: boolean }, keepMine = false) => {
+    const before = { name: current.name, categoryId: current.categoryId, sellingPrice: Number(current.sellingPrice), isActive: current.isActive, isConsignment: current.isConsignment ?? false };
     const changed = (Object.keys(before) as (keyof typeof before)[]).filter(k => fields[k] !== before[k]);
     if (changed.length === 0) return { queued: false as const, data: current };
     const body = {
@@ -130,6 +133,7 @@ export function ProductEditModal({ product, onClose, onSaved }: {
         categoryId,
         sellingPrice: Math.round(priceValue * 100) / 100,
         isActive,
+        isConsignment,
       };
       if (product) {
         const sent = await sendEdit(product, fields);
@@ -227,6 +231,26 @@ export function ProductEditModal({ product, onClose, onSaved }: {
           <span className="min-w-0">
             <span className="block text-ink font-medium">{isActive ? 'Se vende en el POS' : 'Oculto en el POS'}</span>
             <span className="block text-ink/40 text-xs">{isActive ? 'Apágalo para dejar de venderlo sin perder su historial.' : 'Sus ventas pasadas y su receta se conservan.'}</span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          role="switch"
+          aria-checked={isConsignment}
+          onClick={() => setIsConsignment(!isConsignment)}
+          className="w-full flex items-center gap-3 p-3 rounded-xl bg-ink/5 border border-ink/10 text-left"
+        >
+          <span className={cn('w-11 h-6 rounded-full p-0.5 transition-colors shrink-0', isConsignment ? 'bg-primary' : 'bg-ink/20')}>
+            <span className={cn('block w-5 h-5 rounded-full bg-raised shadow transition-transform', isConsignment && 'translate-x-5')} />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-ink font-medium">{isConsignment ? 'A consignación (de un proveedor)' : 'Producto de la cafetería'}</span>
+            <span className="block text-ink/40 text-xs">
+              {isConsignment
+                ? 'Descuenta inventario, pero su dinero es del proveedor: no cuenta en ventas ni utilidad. En el corte sale aparte como dinero por entregar.'
+                : 'Actívalo para artículos que solo vendes por un proveedor, como café en grano o molido.'}
+            </span>
           </span>
         </button>
 

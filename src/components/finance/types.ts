@@ -52,9 +52,19 @@ export interface ClosingTotals {
   netProfit: number | string;
   marginPct: number | string;
   reinvestmentTotal: number | string;
+  /** Charged for consignment products: in the box, but owed to the supplier (older servers leave it out). */
+  consignmentSales?: number | string;
   cashSales: number | string;
   transferSales: number | string;
   totalTransactions: number;
+}
+
+/** A consignment product sold that day. */
+export interface ConsignmentRow {
+  productId: number;
+  name: string;
+  quantity: number;
+  amount: number;
 }
 
 export interface DayExpense {
@@ -73,6 +83,7 @@ export interface ClosingPreview extends ClosingTotals {
   alreadyClosed: boolean;
   details: ClosingDetail[];
   expenses: DayExpense[];
+  consignment?: ConsignmentRow[];
   /** Orders sent to the bar but not charged yet; they count on the day they are paid. */
   unpaidOrders?: { count: number; total: number };
   /** Devices that last said they still have sales or records to send (older servers leave it out). */
@@ -87,4 +98,5 @@ export interface DailyClosing extends ClosingTotals {
   user?: { name: string };
   details?: ClosingDetail[];
   expenses?: DayExpense[];
+  consignment?: ConsignmentRow[];
 }

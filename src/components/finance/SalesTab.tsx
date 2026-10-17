@@ -13,7 +13,7 @@ import { EditSaleDialog } from '../sales/EditSaleDialog';
 import type { Consumption, SaleRow } from '../sales/types';
 
 type SalesHistory = {
-  summary: { salesCount: number; cancelledCount: number; totalSales: number; totalDiscount: number; totalCost: number; grossProfit: number };
+  summary: { salesCount: number; cancelledCount: number; totalSales: number; totalDiscount: number; totalCost: number; grossProfit: number; consignmentSales?: number };
   ingredients: Consumption[];
   sales: SaleRow[];
 };
@@ -100,6 +100,7 @@ export function SalesTab() {
               hint={[
                 data.summary.totalDiscount > 0 && `Descuentos −${formatMoney(data.summary.totalDiscount)}`,
                 data.summary.cancelledCount > 0 && `${data.summary.cancelledCount} anulada${data.summary.cancelledCount === 1 ? '' : 's'}`,
+                !!data.summary.consignmentSales && `+${formatMoney(data.summary.consignmentSales)} del proveedor`,
               ].filter(Boolean).join(' · ') || undefined}
             />
             <StatCard label="Costo de insumos" value={formatMoney(data.summary.totalCost)} tone="error" />
@@ -156,6 +157,7 @@ export function SalesTab() {
                             <li key={idx} className="flex justify-between gap-3">
                               <span className="text-ink/80 min-w-0">
                                 {item.quantity}× {item.name}
+                                {item.isConsignment && <span className="block text-secondary text-xs">A consignación: es del proveedor</span>}
                                 {item.modifiers.length > 0 && <span className="block text-ink/40 text-xs">{item.modifiers.join(', ')}</span>}
                                 {item.discount > 0 && <span className="block text-secondary text-xs">Descuento −{formatMoney(item.discount)}</span>}
                               </span>

@@ -272,13 +272,14 @@ export function withQueuedProductEdits<T extends { id: number; sellingPrice: str
   if (edits.length === 0) return products;
   return products.map(p => edits.reduce((acc, op) => {
     if (Number(PRODUCT_EDIT_URL.exec(op.url)?.[1]) !== p.id) return acc;
-    const body = op.body as { name?: string; categoryId?: number; sellingPrice?: number; isActive?: boolean };
+    const body = op.body as { name?: string; categoryId?: number; sellingPrice?: number; isActive?: boolean; isConsignment?: boolean };
     return {
       ...acc,
       ...(body.name !== undefined && { name: body.name }),
       ...(body.categoryId !== undefined && { categoryId: body.categoryId }),
       ...(body.sellingPrice !== undefined && { sellingPrice: String(body.sellingPrice) }),
       ...(body.isActive !== undefined && { isActive: body.isActive }),
+      ...(body.isConsignment !== undefined && { isConsignment: body.isConsignment }),
     };
   }, p));
 }

@@ -11,6 +11,8 @@ interface DashboardData {
     marginPct: number;
     totalTransactions: number;
     reinvestment: number;
+    /** Charged for consignment products; not in revenue (older servers leave it out). */
+    consignmentSales?: number;
   };
   topProducts: { name: string; qty: number; revenue: number }[];
   lowStock: { id: number; name: string; currentStock: string; minStock: string; unit: string }[];
@@ -84,6 +86,9 @@ export function DashboardPage() {
               <p className="text-ink/50 text-sm font-label uppercase tracking-widest mb-2">Ventas del día</p>
               <h2 className="font-headline text-4xl sm:text-5xl lg:text-6xl font-bold text-primary break-words">{formatMoney(metrics.revenue)}</h2>
               <p className="text-ink/40 text-xs font-label mt-2">{metrics.totalTransactions} transacciones</p>
+              {!!data?.today.consignmentSales && (
+                <p className="text-secondary text-xs font-label mt-1">Más {formatMoney(data.today.consignmentSales)} a consignación, por entregar al proveedor</p>
+              )}
             </div>
             <TrendingUp className="w-6 h-6 text-secondary" />
           </div>

@@ -50,6 +50,7 @@ interface Product {
   sellingPrice: string;
   categoryId: number;
   isActive: boolean;
+  isConsignment?: boolean;
   imageUrl?: string | null;
   category?: { name: string };
 }
@@ -644,7 +645,7 @@ export function InventoryPage() {
                   <span className={cn('flex-1 min-w-0', !p.isActive && 'opacity-50')}>
                     <span className="block font-medium truncate">{p.name}</span>
                     <span className="block text-xs text-ink/40 truncate">
-                      {p.category?.name}{!p.isActive && ' · oculto en POS'}
+                      {p.category?.name}{p.isConsignment && ' · a consignación'}{!p.isActive && ' · oculto en POS'}
                     </span>
                   </span>
                   <ChevronRight className="w-4 h-4 text-ink/30 shrink-0" />
@@ -678,6 +679,11 @@ export function InventoryPage() {
                         {selectedProduct.isActive === false && (
                           <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded bg-error/15 text-error text-[10px] font-label uppercase tracking-widest">
                             <EyeOff className="w-3 h-3" /> Oculto en POS
+                          </span>
+                        )}
+                        {selectedProduct.isConsignment && (
+                          <span className="inline-flex items-center gap-1 mt-2 ml-1 px-2 py-0.5 rounded bg-secondary/15 text-secondary text-[10px] font-label uppercase tracking-widest">
+                            <Store className="w-3 h-3" /> A consignación
                           </span>
                         )}
                       </div>
