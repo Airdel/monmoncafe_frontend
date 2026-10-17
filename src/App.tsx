@@ -4,6 +4,7 @@ import { SideNavBar } from './components/layout/SideNavBar';
 import { BottomNav, MobileTopBar } from './components/layout/MobileNav';
 import { ThemePicker } from './components/ui/ThemePicker';
 import { DialogHost } from './components/ui/DialogHost';
+import { SeasonalBackdrop, SeasonalGarland } from './components/ui/SeasonalDecor';
 import { ConnectionBanner } from './components/layout/ConnectionBanner';
 import { startOfflineSync } from './lib/offline';
 import { InventoryPage } from './pages/InventoryPage';
@@ -29,6 +30,8 @@ function App() {
   if (!accessToken) {
     return (
       <>
+        <SeasonalBackdrop />
+        <SeasonalGarland className="fixed inset-x-0 top-0 pt-safe z-10" />
         <LoginPage onOpenThemes={openThemes} />
         {themePicker}
         <DialogHost />
@@ -38,11 +41,13 @@ function App() {
 
   return (
     <div className="h-[100dvh] flex text-ink overflow-hidden">
+      <SeasonalBackdrop />
       <SideNavBar onOpenThemes={openThemes} />
 
       <div className="flex-1 min-w-0 flex flex-col">
         <MobileTopBar onOpenThemes={openThemes} />
         <ConnectionBanner />
+        <SeasonalGarland />
         <main className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <Routes>
             <Route path="/" element={<DashboardPage />} />
