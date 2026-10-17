@@ -1,29 +1,56 @@
+import { useEffect, useState } from 'react';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Capacitor, SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { DARK_THEMES, DEFAULT_THEME, isThemeId, type ThemeId } from '../lib/themes';
+import { DEFAULT_DECOR, isDecorMode, resolveSeason, type DecorMode, type SeasonId } from '../lib/seasons';
 
 interface ThemeState {
   theme: ThemeId;
+  decor: DecorMode;
+  /** Falling leaves/snow; off keeps only the still decoration. */
+  decorMotion: boolean;
   setTheme: (theme: ThemeId) => void;
+  setDecor: (decor: DecorMode) => void;
+  setDecorMotion: (decorMotion: boolean) => void;
 }
 
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set) => ({
       theme: DEFAULT_THEME,
+      decor: DEFAULT_DECOR,
+      decorMotion: true,
       setTheme: (theme) => set({ theme }),
+      setDecor: (decor) => set({ decor }),
+      setDecorMotion: (decorMotion) => set({ decorMotion }),
     }),
     {
       name: 'theme',
-      // Ignore stored values for themes that no longer exist
+      // Ignore stored values for themes/seasons that no longer exist
       merge: (persisted, current) => {
-        const theme = (persisted as Partial<ThemeState> | undefined)?.theme;
-        return { ...current, theme: isThemeId(theme) ? theme : current.theme };
+        const stored = (persisted as Partial<ThemeState> | undefined) ?? {};
+        return {
+          ...current,
+          theme: isThemeId(stored.theme) ? stored.theme : current.theme,
+          decor: isDecorMode(stored.decor) ? stored.decor : current.decor,
+          decorMotion: typeof stored.decorMotion === 'boolean' ? stored.decorMotion : current.decorMotion,
+        };
       },
     },
   ),
 );
+
+/** Active season for this device, re-checked every hour so 'auto' changes on its own. */
+export function useActiveSeason(): SeasonId | null {
+  const mode = useThemeStore(state => state.decor);
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return resolveSeason(mode, now);
+}
 
 function applyTheme(theme: ThemeId) {
   const root = document.documentElement;

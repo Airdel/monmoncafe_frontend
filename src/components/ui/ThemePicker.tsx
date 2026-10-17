@@ -1,5 +1,6 @@
 import { Check, Coffee } from 'lucide-react';
 import { THEMES } from '../../lib/themes';
+import { SEASONS, getSeason, seasonForDate, type DecorMode } from '../../lib/seasons';
 import { useThemeStore } from '../../store/theme';
 import { Modal } from './Modal';
 import { APP_VERSION } from '../../lib/version';
@@ -8,6 +9,17 @@ import { APP_VERSION } from '../../lib/version';
 export function ThemePicker({ onClose }: { onClose: () => void }) {
   const theme = useThemeStore(state => state.theme);
   const setTheme = useThemeStore(state => state.setTheme);
+  const decor = useThemeStore(state => state.decor);
+  const setDecor = useThemeStore(state => state.setDecor);
+  const decorMotion = useThemeStore(state => state.decorMotion);
+  const setDecorMotion = useThemeStore(state => state.setDecorMotion);
+  const today = seasonForDate(new Date());
+
+  const decorOptions: { id: DecorMode; label: string; hint: string }[] = [
+    { id: 'auto', label: 'Automática', hint: today ? `Hoy: ${getSeason(today).name}` : 'Hoy: ninguna' },
+    ...SEASONS.map(season => ({ id: season.id as DecorMode, label: season.name, hint: season.description })),
+    { id: 'off', label: 'Sin decoración', hint: 'Solo el tema' },
+  ];
 
   return (
     <Modal title="Temas" onClose={onClose} wide>
@@ -47,6 +59,36 @@ export function ThemePicker({ onClose }: { onClose: () => void }) {
           );
         })}
       </div>
+
+      <h4 className="font-headline font-bold text-ink mt-6 mb-1">Decoración de temporada</h4>
+      <p className="text-ink/60 text-sm mb-3">Se suma al tema. En automática cambia sola: otoño en octubre y noviembre, Día de Muertos del 25 de octubre al 2 de noviembre y Navidad del 1 de diciembre al 6 de enero.</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {decorOptions.map(option => {
+          const active = option.id === decor;
+          return (
+            <button
+              key={option.id}
+              onClick={() => setDecor(option.id)}
+              aria-pressed={active}
+              className={`text-left rounded-xl px-3 py-2 border-2 transition-colors ${active ? 'border-primary bg-primary/10' : 'border-ink/10 hover:border-primary/40'}`}
+            >
+              <p className="font-bold text-sm leading-tight">{option.label}</p>
+              <p className="text-ink/50 text-xs truncate">{option.hint}</p>
+            </button>
+          );
+        })}
+      </div>
+      {decor !== 'off' && (
+        <label className="flex items-center gap-3 mt-3 text-sm cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={decorMotion}
+            onChange={e => setDecorMotion(e.target.checked)}
+            className="w-5 h-5 shrink-0 accent-[rgb(var(--c-primary))]"
+          />
+          <span>Animación (hojas, pétalos o nieve cayendo). Apágala si el celular se siente lento.</span>
+        </label>
+      )}
       {APP_VERSION && <p className="text-center text-ink/40 text-xs mt-4">Versión {APP_VERSION}</p>}
     </Modal>
   );

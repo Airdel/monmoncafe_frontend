@@ -48,6 +48,7 @@
   --font-label: 'Nunito Variable', sans-serif;
   --font-mono: 'Nunito Variable', ui-sans-serif, sans-serif;
   --theme-color: #fff6f2;
+  --decor-snow: #8fbce6;
 }
 
 [data-theme='matcha'] {
@@ -201,6 +202,7 @@
   --font-label: 'Space Grotesk Variable', monospace;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --theme-color: #111318;
+  --decor-snow: #ffffff;
 }
 
 @layer base {
@@ -276,5 +278,41 @@
 
   .pb-safe {
     padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Seasonal decoration (src/components/ui/SeasonalDecor.tsx) */
+@keyframes decor-fall {
+  from { transform: translate3d(0, -10vh, 0) rotate(0deg); }
+  to { transform: translate3d(0, 110vh, 0) rotate(var(--decor-spin, 360deg)); }
+}
+
+@keyframes decor-sway {
+  0%, 100% { transform: translateX(-14px); }
+  50% { transform: translateX(14px); }
+}
+
+@keyframes decor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.decor-fall {
+  animation: decor-fall linear infinite;
+  will-change: transform;
+}
+
+.decor-sway {
+  animation: decor-sway ease-in-out infinite;
+}
+
+.decor-blink {
+  animation: decor-blink 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .decor-layer,
+  .decor-layer * {
+    animation: none !important;
   }
 }

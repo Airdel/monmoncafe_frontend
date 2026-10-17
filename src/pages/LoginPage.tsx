@@ -7,6 +7,8 @@ import { getApiUrl, hasCustomApiUrl, isNativeApp, normalizeApiUrl, setApiUrl } f
 import { useAuthStore } from '../store/auth';
 import * as motion from 'motion/react-client';
 import { APP_VERSION } from '../lib/version';
+import { getSeason } from '../lib/seasons';
+import { useActiveSeason } from '../store/theme';
 
 export function LoginPage({ onOpenThemes }: { onOpenThemes: () => void }) {
   const [email, setEmail] = useState('');
@@ -16,6 +18,7 @@ export function LoginPage({ onOpenThemes }: { onOpenThemes: () => void }) {
   const [serverUrl, setServerUrl] = useState(getApiUrl);
   const [showServer, setShowServer] = useState(isNativeApp && !hasCustomApiUrl());
   const setAuth = useAuthStore((state) => state.setAuth);
+  const season = useActiveSeason();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,6 +77,9 @@ export function LoginPage({ onOpenThemes }: { onOpenThemes: () => void }) {
           </div>
           <h1 className="font-headline text-3xl font-bold tracking-tight">MonMon Caf<span className="text-ink/50">é</span></h1>
           <p className="font-label text-ink/40 text-xs uppercase tracking-widest mt-2">Management OS</p>
+          {season && (
+            <p className="mt-3 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-headline font-semibold">{getSeason(season).greeting}</p>
+          )}
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
