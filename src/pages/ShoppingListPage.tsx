@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, CheckCircle2, Trash2, ListChecks, Loader2, Minus, Package, Pencil, Plus, RotateCcw, Star, Wallet } from 'lucide-react';
+import { Check, CheckCircle2, Trash2, ListChecks, Loader2, Minus, Package, Pencil, Plus, RotateCcw, ScanLine, Star, Wallet } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { getErrorMessage } from '../lib/errors';
@@ -18,6 +18,9 @@ import { SearchInput } from '../components/ui/SearchInput';
 import { inputClass, labelClass, primaryButtonClass } from '../components/finance/styles';
 import { OtherPurchaseForm, type PlainExpense } from '../components/inventory/OtherPurchaseForm';
 import { EXPENSE_CATEGORIES, expenseCategoryLabel, toolCategory, type ExpenseCategory, type Tool, type ToolCategory } from '../lib/tools';
+import { loadBarcodes, localId, packagePriceAt, type Barcode } from '../lib/barcodes';
+import { BarcodeScannerModal } from '../components/inventory/BarcodeScanner';
+import { NewBarcodeModal } from '../components/inventory/NewBarcodeModal';
 
 const PRIORITIES: { key: Priority; label: string; className: string }[] = [
   { key: 'ESSENTIAL', label: 'Esencial', className: 'bg-error/15 text-error border-error/30' },
@@ -78,6 +81,8 @@ const paidFor = (i: ListItem) => i.purchase
 /** Lists and items made offline are known by their clientId until the server has them. */
 const itemRef = (i: { id: number; clientId?: string | null }) => i.clientId ?? i.id;
 const purchaseUrl = (ref: number | string) => `/shopping-lists/items/${ref}/purchase`;
+
+type PurchaseBody = { quantity: number; totalCost: number; supplierId?: number; barcode?: string; packages?: number };
 
 const LIST_CACHE_KEY = 'cache:/shopping-lists/current';
 
@@ -229,6 +234,12 @@ export function ShoppingListPage() {
   const [buying, setBuying] = useState<ListItem | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [showExtra, setShowExtra] = useState(false);
+  // Scanning a product: the codes the shop knows, and what is being scanned for
+  const [barcodes, setBarcodes] = useState<Barcode[]>([]);
+  const [stockIngredients, setStockIngredients] = useState<StockIngredient[]>([]);
+  const [scanning, setScanning] = useState<{ forItem?: ListItem } | null>(null);
+  const [newCode, setNewCode] = useState<{ code: string; forItem?: ListItem } | null>(null);
+  const [buyingScan, setBuyingScan] = useState<Barcode | null>(null);
 
   const queuedOps = useOfflineOps(state => state.ops);
   const [serverList, setList] = useState<ShoppingList | null>(null);
@@ -271,11 +282,108 @@ export function ShoppingListPage() {
     setList(l => l && { ...l, items: l.items.map(i => itemRef(i) === itemRef(item) ? item : i) });
 
   /** Checking off records what was bought: insumos go to the inventory, tools and extras to the day's expenses. */
-  const purchaseItem = async (item: ListItem, body: { quantity: number; totalCost: number; supplierId?: number }) => {
+  const purchaseItem = async (item: ListItem, body: PurchaseBody) => {
     const sent = await sendOrQueue(purchaseUrl(itemRef(item)), body, `Compré: ${itemName(item)} ${formatQty(body.quantity, itemUnit(item))} (${formatMoney(body.totalCost)})`);
     if (sent.queued) toast.success(QUEUED_MESSAGE);
     else await loadList().catch(notifyError);
+    if (body.barcode && !sent.queued) loadBarcodes(stockIngredients).then(setBarcodes).catch(() => undefined);
+    closePurchase();
+  };
+
+  const closePurchase = () => {
     setBuying(null);
+    setBuyingScan(null);
+  };
+
+  /** Opens the scanner, with what the codes need already read (from the server or this device). */
+  const startScan = async (forItem?: ListItem) => {
+    closePurchase();
+    let ingredients = stockIngredients;
+    if (ingredients.length === 0) {
+      ingredients = await cachedGet<StockIngredient[]>('/inventory/ingredients').catch(() => []);
+      setStockIngredients(ingredients);
+    }
+    setBarcodes(await loadBarcodes(ingredients));
+    setScanning({ forItem });
+  };
+
+  const onScanned = (code: string) => {
+    const forItem = scanning?.forItem;
+    setScanning(null);
+    const known = barcodes.find(b => b.code === code);
+    if (known) void buyScanned(known, forItem);
+    else if (stockIngredients.length === 0) toast.error('Sin conexión y sin copia de los insumos en este dispositivo. Abre Inventario una vez con la PC prendida.');
+    else setNewCode({ code, forItem });
+  };
+
+  /**
+   * A known product was scanned: opens its purchase already filled. It goes
+   * on the row of its insumo, brings it back if it was left out of the
+   * budget, or is added to the list when the planner didn't pick it.
+   */
+  const buyScanned = async (barcode: Barcode, forItem?: ListItem) => {
+    if (!list) return;
+    if (forItem && forItem.ingredientId !== barcode.ingredientId) {
+      toast.error(`Ese código es de ${barcode.ingredient.name}, no de ${itemName(forItem)}.`);
+      return;
+    }
+    const open = list.items.filter(i => i.ingredientId === barcode.ingredientId && !i.purchased);
+    const onList = (forItem && open.find(i => itemRef(i) === itemRef(forItem))) ?? open.find(i => i.inBudget) ?? open[0];
+    if (onList) {
+      if (!onList.inBudget) await updateItem(onList, { inBudget: true });
+      setBuying({ ...onList, inBudget: true });
+      setBuyingScan(barcode);
+      return;
+    }
+    if (!await confirm({
+      title: `${barcode.ingredient.name} no está en la lista`,
+      message: 'Se agrega a la lista para registrar lo que compraste.',
+      confirmLabel: 'Agregar y registrar',
+    })) return;
+    try {
+      const item = await addIngredientItem(barcode);
+      setBuying(item);
+      setBuyingScan(barcode);
+    } catch (err) {
+      notifyError(err);
+    }
+  };
+
+  /** Puts an insumo on the list; with the server off it waits on the device with its own clientId. */
+  const addIngredientItem = async (barcode: Barcode): Promise<ListItem> => {
+    const clientId = newClientId();
+    const quantity = Number(barcode.packageQuantity);
+    const sent = await sendOrQueue<ListItem>(`/shopping-lists/${itemRef(list!)}/items`, { ingredientId: barcode.ingredientId, quantity, clientId }, `Agregar a la lista: ${barcode.ingredient.name}`);
+    const known = stockIngredients.find(i => i.id === barcode.ingredientId);
+    const item: ListItem = sent.queued ? {
+      id: localId(),
+      clientId,
+      ingredientId: barcode.ingredientId,
+      toolId: null,
+      description: null,
+      expenseCategory: null,
+      priority: known?.priority ?? 'IMPORTANT',
+      stock: known?.currentStock ?? '0',
+      minStock: known?.minStock ?? '0',
+      quantity: String(quantity),
+      unitCost: known?.currentCostPerUnit ?? '0',
+      inBudget: true,
+      partial: false,
+      purchased: false,
+      ingredient: { name: barcode.ingredient.name, unit: barcode.ingredient.unit, supplierId: known?.supplierId ?? null, supplier: known?.supplier ?? null },
+      tool: null,
+      purchase: null,
+      expense: null,
+    } : sent.data;
+    setList(l => l && { ...l, items: [...l.items, item] });
+    return item;
+  };
+
+  const onBarcodeSaved = (barcode: Barcode) => {
+    const forItem = newCode?.forItem;
+    setNewCode(null);
+    setBarcodes(list => [...list.filter(b => b.code !== barcode.code), barcode]);
+    void buyScanned(barcode, forItem);
   };
 
   /** Unchecking takes the purchase back out of the inventory or the day's expenses. */
@@ -491,6 +599,10 @@ export function ShoppingListPage() {
             </p>
           </div>
 
+          <button onClick={() => startScan()} className="glass-panel p-3 sm:p-4 flex items-center justify-center gap-2 text-primary font-semibold hover:bg-primary/5 transition-all">
+            <ScanLine className="w-5 h-5" /> Escanear un producto
+          </button>
+
           {list.items.length === extras.length && (
             <div className="glass-panel p-8 text-center text-ink/60">
               <CheckCircle2 className="w-10 h-10 text-secondary mx-auto mb-2" />
@@ -582,7 +694,27 @@ export function ShoppingListPage() {
       )}
 
       {buying && (
-        <PurchaseModal item={buying} suppliers={suppliers} onClose={() => setBuying(null)} onConfirm={body => purchaseItem(buying, body)} />
+        <PurchaseModal
+          key={`${itemRef(buying)}:${buyingScan?.code ?? ''}`}
+          item={buying}
+          scan={buyingScan}
+          suppliers={suppliers}
+          onClose={closePurchase}
+          onScan={buying.ingredientId !== null ? () => startScan(buying) : undefined}
+          onConfirm={body => purchaseItem(buying, body)}
+        />
+      )}
+
+      {scanning && <BarcodeScannerModal onCode={onScanned} onClose={() => setScanning(null)} />}
+
+      {newCode && (
+        <NewBarcodeModal
+          code={newCode.code}
+          ingredients={stockIngredients}
+          initialIngredientId={newCode.forItem?.ingredientId ?? undefined}
+          onSaved={onBarcodeSaved}
+          onClose={() => setNewCode(null)}
+        />
       )}
 
       {editing && (
@@ -607,29 +739,71 @@ export function ShoppingListPage() {
   );
 }
 
-/** Confirms what was really bought before it enters the inventory. */
-function PurchaseModal({ item, suppliers, onClose, onConfirm }: {
+const roundQty = (n: number) => Math.round(n * 10000) / 10000;
+
+/**
+ * Confirms what was really bought before it enters the inventory. After a
+ * scan it comes filled: packages × what one holds, and the last price paid
+ * for that product at the store.
+ */
+function PurchaseModal({ item, scan, suppliers, onClose, onScan, onConfirm }: {
   item: ListItem;
+  scan?: Barcode | null;
   suppliers: Supplier[];
   onClose: () => void;
-  onConfirm: (body: { quantity: number; totalCost: number; supplierId?: number }) => Promise<void>;
+  /** Scans the product from here (insumos only). */
+  onScan?: () => void;
+  onConfirm: (body: PurchaseBody) => Promise<void>;
 }) {
-  const [quantity, setQuantity] = useState(String(Number(item.quantity)));
-  const [totalCost, setTotalCost] = useState((Number(item.quantity) * Number(item.unitCost)).toFixed(2));
-  const defaultSupplier = itemSupplierId(item);
+  const perPackage = scan ? Number(scan.packageQuantity) : 0;
+  const defaultSupplier = scan?.prices[0]?.supplierId ?? itemSupplierId(item);
+  const priceAt = (id: string) => scan ? packagePriceAt(scan, id ? Number(id) : null) : null;
+  // Enough packages to cover what the list asks for
+  const [packages, setPackages] = useState(perPackage > 0 ? Math.max(1, Math.ceil(roundQty(Number(item.quantity) / perPackage))) : 1);
+  const [quantity, setQuantity] = useState(String(perPackage > 0 ? roundQty(packages * perPackage) : Number(item.quantity)));
   const [supplierId, setSupplierId] = useState(defaultSupplier ? String(defaultSupplier) : '');
+  const [totalCost, setTotalCost] = useState(() => {
+    const price = priceAt(supplierId);
+    return (price !== null ? packages * price : Number(quantity) * Number(item.unitCost)).toFixed(2);
+  });
+  // Once someone types the total, changing packages or store leaves it alone
+  const [costTouched, setCostTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const qty = Number(quantity);
   const cost = Number(totalCost);
   const wholePieces = !item.ingredient;
   const valid = qty > 0 && cost > 0 && (!item.tool || Number.isInteger(qty));
   const unit = unitLabel(itemUnit(item));
+  // Packages count only while the quantity still is packages × content
+  const scanned = scan && perPackage > 0 && Math.abs(qty - packages * perPackage) < 0.0001 ? scan : null;
+  const lastPrice = priceAt(supplierId);
+  const storeName = (id: number | null) => suppliers.find(s => s.id === id)?.name;
+  const lastPriceStore = scan?.prices.find(p => p.supplierId === (supplierId ? Number(supplierId) : null)) ?? scan?.prices[0];
+
+  const changePackages = (n: number) => {
+    if (n < 1) return;
+    setPackages(n);
+    setQuantity(String(roundQty(n * perPackage)));
+    const price = priceAt(supplierId);
+    if (!costTouched && price !== null) setTotalCost((n * price).toFixed(2));
+  };
+
+  const changeStore = (id: string) => {
+    setSupplierId(id);
+    const price = priceAt(id);
+    if (scanned && !costTouched && price !== null) setTotalCost((packages * price).toFixed(2));
+  };
 
   const submit = async () => {
     if (!valid) return;
     setSaving(true);
     try {
-      await onConfirm({ quantity: qty, totalCost: Math.round(cost * 100) / 100, ...(supplierId && { supplierId: Number(supplierId) }) });
+      await onConfirm({
+        quantity: qty,
+        totalCost: Math.round(cost * 100) / 100,
+        ...(supplierId && { supplierId: Number(supplierId) }),
+        ...(scanned && { barcode: scanned.code, packages }),
+      });
     } catch (err) {
       notifyError(err);
       setSaving(false);
@@ -646,6 +820,24 @@ function PurchaseModal({ item, suppliers, onClose, onConfirm }: {
               ? 'Las piezas se suman a Herramientas y lo que pagaste cuenta como gasto de hoy.'
               : 'Lo que pagaste cuenta como gasto de hoy en el corte.'}
         </p>
+        {scan ? (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-secondary/10 border border-secondary/30">
+            <ScanLine className="w-5 h-5 text-secondary shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-ink truncate">{scan.label ?? scan.ingredient.name}</p>
+              <p className="text-xs text-ink/50">{formatQty(perPackage, itemUnit(item))} por paquete</p>
+            </div>
+            <div className="flex items-center gap-1 shrink-0" role="group" aria-label="Paquetes">
+              <button type="button" onClick={() => changePackages(packages - 1)} disabled={packages <= 1} className="w-9 h-9 rounded-lg border border-ink/15 flex items-center justify-center text-ink/70 disabled:opacity-30" aria-label="Un paquete menos"><Minus className="w-4 h-4" /></button>
+              <span className="w-8 text-center font-semibold text-ink" aria-live="polite">{packages}</span>
+              <button type="button" onClick={() => changePackages(packages + 1)} className="w-9 h-9 rounded-lg border border-ink/15 flex items-center justify-center text-ink/70" aria-label="Un paquete más"><Plus className="w-4 h-4" /></button>
+            </div>
+          </div>
+        ) : onScan && (
+          <button type="button" onClick={onScan} className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-primary/40 text-primary text-sm font-medium hover:bg-primary/5">
+            <ScanLine className="w-4 h-4" /> Escanear el producto para llenarlo
+          </button>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelClass} htmlFor="buy-qty">Cantidad ({unit})</label>
@@ -653,16 +845,23 @@ function PurchaseModal({ item, suppliers, onClose, onConfirm }: {
           </div>
           <div>
             <label className={labelClass} htmlFor="buy-cost">Pagué en total</label>
-            <input id="buy-cost" type="number" inputMode="decimal" min="0" step="0.01" value={totalCost} onChange={e => setTotalCost(e.target.value)} className={inputClass} />
+            <input id="buy-cost" type="number" inputMode="decimal" min="0" step="0.01" value={totalCost} onChange={e => { setTotalCost(e.target.value); setCostTouched(true); }} className={inputClass} />
           </div>
         </div>
         <div>
           <label className={labelClass} htmlFor="buy-store">Tienda</label>
-          <select id="buy-store" value={supplierId} onChange={e => setSupplierId(e.target.value)} className={inputClass}>
+          <select id="buy-store" value={supplierId} onChange={e => changeStore(e.target.value)} className={inputClass}>
             <option value="">Sin tienda</option>
             {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
+        {scan && (
+          <p className="text-ink/40 text-xs -mt-2">
+            {lastPrice !== null && lastPriceStore
+              ? <>Última vez: <b className="text-ink/70">{formatMoney(lastPrice)}</b> por paquete{storeName(lastPriceStore.supplierId) && ` en ${storeName(lastPriceStore.supplierId)}`}.</>
+              : 'Primera compra de este producto: el precio que escribas se usará la próxima vez.'}
+          </p>
+        )}
         <p className="text-ink/40 text-xs">
           {!valid
             ? (item.tool ? 'Escribe cuántas piezas (enteras) y lo que pagaste.' : 'Escribe la cantidad y lo que pagaste.')
