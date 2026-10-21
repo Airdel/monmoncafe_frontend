@@ -1,6 +1,8 @@
 import { NavLink } from 'react-router-dom';
 import { LogOut, Palette, Users } from 'lucide-react';
+import * as motion from 'motion/react-client';
 import { cn } from '../../lib/cn';
+import { haptic } from '../../lib/haptics';
 import { useAuthStore } from '../../store/auth';
 import { logout, navItems, ROLE_LABELS } from './nav';
 
@@ -18,16 +20,16 @@ export function MobileTopBar({ onOpenThemes }: { onOpenThemes: () => void }) {
         {user?.role === 'ADMIN' && (
           <NavLink
             to="/users"
-            className={({ isActive }) => cn("w-10 h-10 rounded-full flex items-center justify-center hover:text-primary hover:bg-primary/10", isActive ? "text-primary bg-primary/10" : "text-ink/70")}
+            className={({ isActive }) => cn("w-12 h-12 rounded-full flex items-center justify-center hover:text-primary hover:bg-primary/10", isActive ? "text-primary bg-primary/10" : "text-ink/70")}
             aria-label="Usuarios"
           >
             <Users className="w-5 h-5" />
           </NavLink>
         )}
-        <button onClick={onOpenThemes} className="w-10 h-10 rounded-full flex items-center justify-center text-ink/70 hover:text-primary hover:bg-primary/10" aria-label="Temas">
+        <button onClick={onOpenThemes} className="w-12 h-12 rounded-full flex items-center justify-center text-ink/70 hover:text-primary hover:bg-primary/10" aria-label="Temas">
           <Palette className="w-5 h-5" />
         </button>
-        <button onClick={logout} className="w-10 h-10 rounded-full flex items-center justify-center text-error/80 hover:text-error hover:bg-error/10" aria-label="Cerrar sesión">
+        <button onClick={logout} className="w-12 h-12 rounded-full flex items-center justify-center text-error/80 hover:text-error hover:bg-error/10" aria-label="Cerrar sesión">
           <LogOut className="w-5 h-5" />
         </button>
       </div>
@@ -39,7 +41,7 @@ export function MobileTopBar({ onOpenThemes }: { onOpenThemes: () => void }) {
 export function BottomNav() {
   return (
     <nav className="md:hidden shrink-0 pb-safe border-t border-ink/10 bg-nav/90 backdrop-blur-3xl z-40">
-      <div className="grid grid-cols-6 h-16">
+      <div className="grid grid-cols-6 h-[4.5rem]">
         {navItems.filter(item => !item.adminOnly).map(item => {
           const Icon = item.icon;
           return (
@@ -47,15 +49,24 @@ export function BottomNav() {
               key={item.id}
               to={item.path}
               end={item.path === '/'}
+              onClick={haptic.tap}
               className={({ isActive }) => cn(
                 "flex flex-col items-center justify-center gap-1 text-[10px] font-medium transition-colors min-w-0",
-                isActive ? "text-primary" : "text-ink/50"
+                isActive ? "text-primary font-bold" : "text-ink/50"
               )}
             >
               {({ isActive }) => (
                 <>
-                  <span className={cn("px-3 py-1 rounded-full transition-colors", isActive && "bg-primary/15")}>
-                    <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
+                  <span className="relative px-4 py-1.5 rounded-full">
+                    {/* Material indicator pill: slides and stretches to the new tab */}
+                    {isActive && (
+                      <motion.span
+                        layoutId="bottom-nav-pill"
+                        className="absolute inset-0 rounded-full bg-primary/15"
+                        transition={{ type: 'spring', stiffness: 500, damping: 34 }}
+                      />
+                    )}
+                    <Icon className="relative w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
                   </span>
                   {item.shortLabel}
                 </>
