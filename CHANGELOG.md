@@ -10,6 +10,8 @@ Cada cambio se anota en **Sin publicar** en el mismo PR que lo hace. Al publicar
 
 ## [Sin publicar]
 
+## [2.0.0] - 2026-10-21
+
 Primera versión publicada. Reúne todo lo que la app ya hace hoy; a partir de aquí cada versión trae solo lo nuevo.
 
 ### Caja (punto de venta)
