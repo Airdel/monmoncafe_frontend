@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { AlertTriangle, CheckCircle2, CircleHelp, Info, X, XCircle } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import * as motion from 'motion/react-client';
+import { useBackHandler } from '../../lib/backButton';
 import { answerConfirm, dismissToast, useDialogStore, type ToastKind } from '../../lib/dialogs';
 
 const TOAST_STYLE: Record<ToastKind, { icon: typeof Info; color: string }> = {
@@ -22,6 +23,7 @@ export function DialogHost() {
 
 function ConfirmDialog() {
   const current = useDialogStore(s => s.confirmQueue[0]);
+  useBackHandler(!!current, () => answerConfirm(false));
 
   useEffect(() => {
     if (!current) return;

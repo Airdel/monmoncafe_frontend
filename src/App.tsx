@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { MotionConfig } from 'motion/react';
+import * as motion from 'motion/react-client';
 import { SideNavBar } from './components/layout/SideNavBar';
 import { BottomNav, MobileTopBar } from './components/layout/MobileNav';
 import { ThemePicker } from './components/ui/ThemePicker';
@@ -19,6 +21,7 @@ import { useAuthStore } from './store/auth';
 
 function App() {
   const { accessToken, user } = useAuthStore();
+  const location = useLocation();
   const [showThemes, setShowThemes] = useState(false);
   const openThemes = () => setShowThemes(true);
 
@@ -29,17 +32,18 @@ function App() {
 
   if (!accessToken) {
     return (
-      <>
+      <MotionConfig reducedMotion="user">
         <SeasonalBackdrop />
         <SeasonalGarland className="fixed inset-x-0 top-0 pt-safe z-10" />
         <LoginPage onOpenThemes={openThemes} />
         {themePicker}
         <DialogHost />
-      </>
+      </MotionConfig>
     );
   }
 
   return (
+    <MotionConfig reducedMotion="user">
     <div className="h-[100dvh] flex text-ink overflow-hidden">
       <SeasonalBackdrop />
       <SideNavBar onOpenThemes={openThemes} />
@@ -49,6 +53,14 @@ function App() {
         <ConnectionBanner />
         <SeasonalGarland />
         <main className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 lg:p-8">
+          {/* Each section fades in when switching tabs (no transform: pages have fixed-position sheets) */}
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.22, ease: [0.2, 0, 0, 1] }}
+            className="h-full"
+          >
           <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/inventory" element={<InventoryPage />} />
@@ -59,6 +71,7 @@ function App() {
             {user?.role === 'ADMIN' && <Route path="/users" element={<UsersPage />} />}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </motion.div>
         </main>
         <BottomNav />
       </div>
@@ -66,6 +79,7 @@ function App() {
       {themePicker}
       <DialogHost />
     </div>
+    </MotionConfig>
   )
 }
 

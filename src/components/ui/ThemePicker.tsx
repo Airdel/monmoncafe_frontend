@@ -1,7 +1,9 @@
-import { Check, Coffee } from 'lucide-react';
-import { THEMES } from '../../lib/themes';
+import type { CSSProperties } from 'react';
+import { Check, Coffee, Smartphone } from 'lucide-react';
+import { DYNAMIC_THEME, THEMES } from '../../lib/themes';
 import { SEASONS, getSeason, seasonForDate, type DecorMode } from '../../lib/seasons';
-import { useThemeStore } from '../../store/theme';
+import { SEED_PRESETS, dynamicTokens } from '../../lib/dynamicColor';
+import { resolveDynamic, useThemeStore, useWallpaperAvailable, type DynamicMode } from '../../store/theme';
 import { Modal } from './Modal';
 import { APP_VERSION } from '../../lib/version';
 
@@ -14,6 +16,27 @@ export function ThemePicker({ onClose }: { onClose: () => void }) {
   const decorMotion = useThemeStore(state => state.decorMotion);
   const setDecorMotion = useThemeStore(state => state.setDecorMotion);
   const today = seasonForDate(new Date());
+  const seed = useThemeStore(state => state.seed);
+  const seedSource = useThemeStore(state => state.seedSource);
+  const dynamicMode = useThemeStore(state => state.dynamicMode);
+  const setSeed = useThemeStore(state => state.setSeed);
+  const setSeedSource = useThemeStore(state => state.setSeedSource);
+  const setDynamicMode = useThemeStore(state => state.setDynamicMode);
+  const haptics = useThemeStore(state => state.haptics);
+  const setHaptics = useThemeStore(state => state.setHaptics);
+  const wallpaperAvailable = useWallpaperAvailable();
+  const usingWallpaper = wallpaperAvailable && seedSource === 'wallpaper';
+
+  // "Mi fondo" has no CSS block: its preview card gets the computed tokens inline
+  const dynamic = resolveDynamic({ seed, seedSource, dynamicMode });
+  const { 'color-scheme': colorScheme, ...dynamicVars } = dynamicTokens(dynamic.seed, dynamic.dark);
+  const dynamicStyle = { ...dynamicVars, colorScheme } as CSSProperties;
+
+  const modeOptions: { id: DynamicMode; label: string }[] = [
+    { id: 'auto', label: 'Según el celular' },
+    { id: 'light', label: 'Claro' },
+    { id: 'dark', label: 'Oscuro' },
+  ];
 
   const decorOptions: { id: DecorMode; label: string; hint: string }[] = [
     { id: 'auto', label: 'Automática', hint: today ? `Hoy: ${getSeason(today).name}` : 'Hoy: ninguna' },
@@ -33,6 +56,7 @@ export function ThemePicker({ onClose }: { onClose: () => void }) {
               onClick={() => setTheme(t.id)}
               aria-pressed={active}
               data-theme={t.id}
+              style={t.id === DYNAMIC_THEME ? dynamicStyle : undefined}
               className={`text-left rounded-2xl p-3 border-2 bg-canvas text-ink font-body transition-transform active:scale-[0.98] ${active ? 'border-primary' : 'border-ink/10 hover:border-primary/40'}`}
             >
               <div className="glass-panel p-3 flex items-center gap-3">
@@ -59,6 +83,69 @@ export function ThemePicker({ onClose }: { onClose: () => void }) {
           );
         })}
       </div>
+
+      {theme === DYNAMIC_THEME && (
+        <>
+          <h4 className="font-headline font-bold text-ink mt-6 mb-1">Color de Mi fondo</h4>
+          <p className="text-ink/60 text-sm mb-3">
+            {wallpaperAvailable
+              ? 'Toma el color de tu fondo de pantalla, o elige uno.'
+              : 'Elige un color y la app arma toda la paleta. En la app de Android 12 o más nuevo también puede tomar el color de tu fondo de pantalla.'}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {wallpaperAvailable && (
+              <button
+                onClick={() => setSeedSource('wallpaper')}
+                aria-pressed={usingWallpaper}
+                className={`h-12 px-4 rounded-full border-2 flex items-center gap-2 text-sm font-bold transition-colors ${usingWallpaper ? 'border-primary bg-primary/10 text-primary' : 'border-ink/10 hover:border-primary/40'}`}
+              >
+                <Smartphone className="w-4 h-4" /> Fondo de pantalla
+              </button>
+            )}
+            {SEED_PRESETS.map(preset => {
+              const active = !usingWallpaper && seed.toLowerCase() === preset.hex;
+              return (
+                <button
+                  key={preset.hex}
+                  onClick={() => setSeed(preset.hex)}
+                  aria-pressed={active}
+                  aria-label={preset.name}
+                  title={preset.name}
+                  className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-colors ${active ? 'border-primary' : 'border-transparent'}`}
+                >
+                  <span className="w-9 h-9 rounded-full flex items-center justify-center text-white" style={{ backgroundColor: preset.hex }}>
+                    {active && <Check className="w-4 h-4" strokeWidth={3} />}
+                  </span>
+                </button>
+              );
+            })}
+            <label
+              className={`h-12 pl-1.5 pr-4 rounded-full border-2 flex items-center gap-2 text-sm font-bold cursor-pointer ${!usingWallpaper && !SEED_PRESETS.some(p => p.hex === seed.toLowerCase()) ? 'border-primary bg-primary/10 text-primary' : 'border-ink/10 hover:border-primary/40'}`}
+            >
+              <input
+                type="color"
+                value={seed}
+                onChange={e => setSeed(e.target.value)}
+                className="w-9 h-9 rounded-full border-0 p-0 bg-transparent cursor-pointer"
+                aria-label="Otro color"
+              />
+              Otro
+            </label>
+          </div>
+          <div className="flex flex-wrap gap-2 mt-3" role="group" aria-label="Claro u oscuro">
+            {modeOptions.map(option => (
+              <button
+                key={option.id}
+                onClick={() => setDynamicMode(option.id)}
+                aria-pressed={dynamicMode === option.id}
+                className={`h-11 px-4 rounded-full border-2 text-sm font-bold transition-colors ${dynamicMode === option.id ? 'border-primary bg-primary/10 text-primary' : 'border-ink/10 hover:border-primary/40'}`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       <h4 className="font-headline font-bold text-ink mt-6 mb-1">Decoración de temporada</h4>
       <p className="text-ink/60 text-sm mb-3">Se suma al tema. En automática cambia sola: otoño en octubre y noviembre, Día de Muertos del 25 de octubre al 2 de noviembre y Navidad del 1 de diciembre al 6 de enero.</p>
@@ -89,6 +176,17 @@ export function ThemePicker({ onClose }: { onClose: () => void }) {
           <span>Animación (hojas, pétalos o nieve cayendo). Apágala si el celular se siente lento.</span>
         </label>
       )}
+
+      <h4 className="font-headline font-bold text-ink mt-6 mb-1">Al tocar</h4>
+      <label className="flex items-center gap-3 text-sm cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={haptics}
+          onChange={e => setHaptics(e.target.checked)}
+          className="w-5 h-5 shrink-0 accent-[rgb(var(--c-primary))]"
+        />
+        <span>Vibración suave al agregar productos, cobrar o cuando algo sale mal (en el celular).</span>
+      </label>
       {APP_VERSION && <p className="text-center text-ink/40 text-xs mt-4">Versión {APP_VERSION}</p>}
     </Modal>
   );

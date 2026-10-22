@@ -9,9 +9,17 @@ import '@fontsource-variable/inter'
 import '@fontsource-variable/space-grotesk'
 import './index.css'
 import App from './App.tsx'
-import { initTheme } from './store/theme'
+import { App as NativeApp } from '@capacitor/app'
+import { Capacitor } from '@capacitor/core'
+import { initTheme, refreshWallpaperSeed } from './store/theme'
+import { initRipples } from './lib/ripple'
+import { initBackButton } from './lib/backButton'
 
 initTheme()
+initRipples()
+initBackButton()
+// The wallpaper may change while the app is in the background
+if (Capacitor.isNativePlatform()) NativeApp.addListener('resume', refreshWallpaperSeed).catch(() => {})
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type UIEvent } from 'react';
 import { Minus, Plus, Banknote, ArrowLeftRight, Zap, Loader2, ShoppingBag, ChevronDown, Clock, AlertTriangle, Tag } from 'lucide-react';
 import { cn } from '../lib/cn';
 import { api } from '../lib/api';
@@ -16,6 +16,9 @@ import { newClientId, useOfflineSales, type SalePayload } from '../store/offline
 import { useAuthStore } from '../store/auth';
 import { categoryEmoji, type ProductCategory as Category } from '../lib/categories';
 import * as motion from 'motion/react-client';
+import { AnimatePresence, useDragControls } from 'motion/react';
+import { haptic } from '../lib/haptics';
+import { useBackHandler } from '../lib/backButton';
 
 interface Product {
   id: number;
@@ -85,6 +88,12 @@ export function PosPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   // Phones show the order as a bottom sheet
   const [orderOpen, setOrderOpen] = useState(false);
+  const isPhone = usePhoneLayout();
+  // The order button shrinks to an icon while scrolling down the menu
+  const [fabCollapsed, setFabCollapsed] = useState(false);
+  const [lastScroll, setLastScroll] = useState(0);
+  const sheetDrag = useDragControls();
+  useBackHandler(isPhone && orderOpen, () => setOrderOpen(false));
   // Ingredients the current cart would leave below zero, tagged with the cart they belong to
   const [stockCheck, setStockCheck] = useState<{ cartKey: string; warnings: StockWarning[] } | null>(null);
   const cartKey = cart.map(item => `${item.key}x${item.quantity}`).join(',');
@@ -130,6 +139,7 @@ export function PosPage() {
   const stockWarnings = cart.length > 0 && stockCheck?.cartKey === cartKey ? stockCheck.warnings : [];
 
   const addToCart = (product: Product, options: ModifierOption[] = []) => {
+    haptic.tap();
     const key = lineKey(product.id, options);
     setCart(prev => {
       const existing = prev.find(item => item.key === key);
@@ -141,6 +151,7 @@ export function PosPage() {
   };
 
   const removeFromCart = (key: string) => {
+    haptic.tap();
     if (cart.find(item => item.key === key)?.quantity === 1) {
       // The line goes away, and its discount with it
       setDiscounts(prev => {
@@ -285,7 +296,15 @@ export function PosPage() {
         </div>
 
         {/* Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4 auto-rows-max content-start overflow-y-auto min-h-0 pb-24 md:pb-8 md:pr-2 scrollbar-thin">
+        <div
+          onScroll={(e: UIEvent<HTMLDivElement>) => {
+            const top = e.currentTarget.scrollTop;
+            if (Math.abs(top - lastScroll) < 8) return;
+            setFabCollapsed(top > lastScroll && top > 40);
+            setLastScroll(top);
+          }}
+          className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4 auto-rows-max content-start overflow-y-auto min-h-0 pb-24 md:pb-8 md:pr-2 scrollbar-thin"
+        >
           {loading ? (
              <div className="col-span-full flex justify-center py-20">
                <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -326,30 +345,74 @@ export function PosPage() {
         </div>
       </div>
 
-      {/* Phone: summary bar that opens the order sheet */}
+      {/* Phone: floating order button (Material extended FAB) that opens the order sheet */}
       {!orderOpen && (
-        <button
+        <motion.button
+          layout
           onClick={() => setOrderOpen(true)}
-          className="md:hidden fixed inset-x-4 bottom-[calc(5rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)))] z-30 flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-cta text-on-primary font-bold glow-primary"
+          transition={{ type: 'spring', stiffness: 500, damping: 38 }}
+          className="md:hidden fixed right-4 bottom-[calc(5.5rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)))] z-30 h-14 flex items-center gap-3 px-4 rounded-2xl bg-cta text-on-primary font-bold glow-primary overflow-hidden"
+          aria-label={itemCount === 0 ? 'Orden vacía' : `Ver orden, ${itemCount} ${itemCount === 1 ? 'producto' : 'productos'}, ${formatMoney(total)}`}
         >
-          <ShoppingBag className="w-5 h-5" />
-          <span className="flex-1 text-left">{itemCount === 0 ? 'Orden vacía' : `Ver orden · ${itemCount} ${itemCount === 1 ? 'producto' : 'productos'}`}</span>
-          <span className="font-mono text-lg">{formatMoney(total)}</span>
-        </button>
+          <motion.span layout className="relative shrink-0">
+            <ShoppingBag className="w-6 h-6" />
+            <AnimatePresence>
+              {itemCount > 0 && (
+                <motion.span
+                  key={itemCount}
+                  initial={{ scale: 1.6 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0 }}
+                  transition={{ type: 'spring', stiffness: 600, damping: 14 }}
+                  className="absolute -top-2 -right-2.5 min-w-[1.25rem] h-5 px-1 rounded-full bg-on-primary text-primary text-[11px] font-extrabold flex items-center justify-center"
+                >
+                  {itemCount}
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </motion.span>
+          {!fabCollapsed && (
+            <motion.span layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-3 whitespace-nowrap pr-1">
+              <span>{itemCount === 0 ? 'Orden vacía' : 'Ver orden'}</span>
+              <span className="font-mono text-lg">{formatMoney(total)}</span>
+            </motion.span>
+          )}
+        </motion.button>
       )}
       {orderOpen && <div className="md:hidden fixed inset-0 z-40 bg-shade/50 backdrop-blur-sm" onClick={() => setOrderOpen(false)} />}
 
-      {/* Right Column - Order Panel (bottom sheet on phones) */}
-      <div className={cn(
-        'flex-col bg-raised md:bg-raised/70 backdrop-blur-md border border-ink/10 p-5 lg:p-6',
-        'md:static md:flex md:w-72 lg:w-[320px] xl:w-[380px] md:shrink-0 md:h-full md:rounded-2xl md:z-auto',
-        orderOpen ? 'flex fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] rounded-t-3xl pb-[calc(1.25rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)))]' : 'hidden'
-      )}>
+      {/* Right Column - Order Panel (bottom sheet on phones, drag the handle down to close) */}
+      <motion.div
+        key={isPhone && orderOpen ? 'sheet' : 'panel'}
+        initial={isPhone && orderOpen ? { y: '100%' } : false}
+        animate={{ y: 0 }}
+        transition={{ type: 'spring', stiffness: 380, damping: 36 }}
+        drag={isPhone && orderOpen ? 'y' : false}
+        dragControls={sheetDrag}
+        dragListener={false}
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={{ top: 0, bottom: 0.6 }}
+        onDragEnd={(_, info) => {
+          if (info.offset.y > 120 || info.velocity.y > 600) setOrderOpen(false);
+        }}
+        className={cn(
+          'flex-col bg-raised md:bg-raised/70 backdrop-blur-md border border-ink/10 p-5 lg:p-6',
+          'md:static md:flex md:w-72 lg:w-[320px] xl:w-[380px] md:shrink-0 md:h-full md:rounded-2xl md:z-auto',
+          orderOpen ? 'flex fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] rounded-t-3xl pt-2 pb-[calc(1.25rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)))]' : 'hidden'
+        )}
+      >
+        <div
+          onPointerDown={e => sheetDrag.start(e)}
+          className="md:hidden -mx-5 -mt-2 mb-1 pt-3 pb-3 flex justify-center touch-none cursor-grab"
+          aria-hidden="true"
+        >
+          <span className="w-10 h-1.5 rounded-full bg-ink/20" />
+        </div>
 
         {/* Order Header */}
         <div className="mb-4 lg:mb-6 flex items-center justify-between">
           <h2 className="font-headline text-2xl font-bold text-ink">Orden actual</h2>
-          <button onClick={() => setOrderOpen(false)} className="md:hidden -m-2 p-2 text-ink/50" aria-label="Cerrar orden">
+          <button onClick={() => setOrderOpen(false)} className="md:hidden -m-3 w-12 h-12 rounded-full flex items-center justify-center text-ink/50" aria-label="Cerrar orden">
             <ChevronDown className="w-6 h-6" />
           </button>
         </div>
@@ -378,7 +441,7 @@ export function PosPage() {
                   <div className="flex items-center gap-3 mt-1">
                     <button
                       onClick={() => removeFromCart(item.key)}
-                      className="w-9 h-9 rounded-full bg-ink/5 border border-ink/10 flex items-center justify-center text-ink/60 hover:bg-ink/10 hover:text-ink active:scale-90 transition"
+                      className="w-12 h-12 rounded-full bg-ink/5 border border-ink/10 flex items-center justify-center text-ink/60 hover:bg-ink/10 hover:text-ink active:scale-90 transition"
                       aria-label={`Quitar un ${item.product.name}`}
                     >
                       <Minus className="w-4 h-4" />
@@ -386,7 +449,7 @@ export function PosPage() {
                     <span className="font-mono text-base w-6 text-center">{item.quantity}</span>
                     <button
                       onClick={() => addToCart(item.product, item.options)}
-                      className="w-9 h-9 rounded-full bg-ink/5 border border-ink/10 flex items-center justify-center text-ink/60 hover:bg-ink/10 hover:text-ink active:scale-90 transition"
+                      className="w-12 h-12 rounded-full bg-ink/5 border border-ink/10 flex items-center justify-center text-ink/60 hover:bg-ink/10 hover:text-ink active:scale-90 transition"
                       aria-label={`Agregar un ${item.product.name}`}
                     >
                       <Plus className="w-4 h-4" />
@@ -489,7 +552,7 @@ export function PosPage() {
             </button>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Options picker */}
       {picking && (
@@ -512,4 +575,17 @@ export function PosPage() {
       )}
     </div>
   );
+}
+
+/** Below md the order is a bottom sheet; above it, a side panel. */
+function usePhoneLayout() {
+  const query = '(max-width: 767px)';
+  const [phone, setPhone] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const onChange = () => setPhone(media.matches);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
+  return phone;
 }

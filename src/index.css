@@ -210,6 +210,13 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /* Ripple container (src/lib/ripple.ts); position utilities still win */
+  button,
+  a[href],
+  [role='button'] {
+    position: relative;
+  }
+
   body {
     @apply bg-canvas text-ink font-body antialiased min-h-screen;
     background:
@@ -279,6 +286,29 @@
   .pb-safe {
     padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
   }
+}
+
+/* Material ripple (src/lib/ripple.ts) */
+.ripple-host {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.ripple-wave {
+  position: absolute;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.16;
+  transform: scale(0);
+  animation: ripple-spread 0.55s cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+
+@keyframes ripple-spread {
+  60% { opacity: 0.12; }
+  to { transform: scale(1); opacity: 0; }
 }
 
 /* Seasonal decoration (src/components/ui/SeasonalDecor.tsx) */
