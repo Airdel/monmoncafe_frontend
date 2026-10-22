@@ -1,0 +1,65 @@
+name: Publicar versión
+
+# Actions › Publicar versión › Run workflow: turns "Sin publicar" in CHANGELOG.md
+# into a new version, commits it to main and publishes a release with the APK
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Tipo de versión (patch = arreglos, minor = funciones nuevas, major = cambio grande)'
+        type: choice
+        options: [minor, patch, major]
+        default: minor
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - id: version
+        run: echo "name=$(node scripts/preparar-version.mjs ${{ inputs.bump }})" >> "$GITHUB_OUTPUT"
+
+      - name: Commit version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898281+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json CHANGELOG.md
+          git commit -m "Versión ${{ steps.version.outputs.name }}"
+          git push origin HEAD:main
+
+      - id: build
+        uses: ./.github/actions/build-apk
+        with:
+          version-name: ${{ steps.version.outputs.name }}
+          keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.name }}
+          APK: ${{ steps.build.outputs.apk }}
+        run: |
+          {
+            echo
+            echo "---"
+            echo
+            echo "**Instalar:** desde el celular descarga \`$APK\` (abajo, en *Assets*) y ábrelo. Se instala encima de la versión anterior, no hace falta desinstalar."
+          } >> release-notes.md
+          gh release create "v$VERSION" "$APK" \
+            --target "$(git rev-parse HEAD)" \
+            --title "MonMon Café $VERSION" \
+            --notes-file release-notes.md

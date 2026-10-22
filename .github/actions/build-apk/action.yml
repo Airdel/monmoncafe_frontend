@@ -1,0 +1,75 @@
+name: Build APK
+description: Build the web app, sync it into Android and assemble the signed APK
+
+inputs:
+  version-name:
+    description: Version shown in the app and used in the file name, e.g. 2.0.0
+    required: true
+  keystore-base64:
+    description: ANDROID_KEYSTORE_BASE64 secret
+    required: false
+  keystore-password:
+    description: ANDROID_KEYSTORE_PASSWORD secret
+    required: false
+
+outputs:
+  apk:
+    description: Path of the built APK
+    value: ${{ steps.apk.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: 21
+        cache: gradle
+
+    - run: npm ci
+      shell: bash
+    - run: npm run build
+      shell: bash
+      env:
+        VITE_APP_VERSION: ${{ inputs.version-name }}
+    - run: npx cap sync android
+      shell: bash
+
+    # Same signing key on every run so new APKs install over the old one
+    - name: Restore signing key
+      shell: bash
+      env:
+        ANDROID_KEYSTORE_BASE64: ${{ inputs.keystore-base64 }}
+        ANDROID_KEYSTORE_PASSWORD: ${{ inputs.keystore-password }}
+      run: |
+        if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+          ks="$RUNNER_TEMP/monmoncafe.keystore"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$ks"
+          alias=$(keytool -list -v -keystore "$ks" -storepass "$ANDROID_KEYSTORE_PASSWORD" | sed -n 's/^Alias name: //p' | head -1)
+          [ -n "$alias" ] || { echo "::error::Could not read the signing key (check ANDROID_KEYSTORE_PASSWORD)"; exit 1; }
+          echo "ANDROID_KEYSTORE_FILE=$ks" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_ALIAS=$alias" >> "$GITHUB_ENV"
+        else
+          echo "::warning::ANDROID_KEYSTORE_BASE64 secret not set; APK signed with a throwaway debug key"
+        fi
+
+    # versionCode = minutes since 2026-01-01 UTC: always above the old run-number
+    # codes and increasing across both workflows, so every new APK installs as an update
+    - name: Version code
+      shell: bash
+      run: echo "VERSION_CODE=$(( ($(date +%s) - 1767225600) / 60 ))" >> "$GITHUB_ENV"
+
+    - run: ./gradlew assembleDebug
+      shell: bash
+      working-directory: android
+      env:
+        VERSION_NAME: ${{ inputs.version-name }}
+        ANDROID_KEYSTORE_PASSWORD: ${{ inputs.keystore-password }}
+
+    # Versioned file name so shared APKs are easy to tell apart
+    - id: apk
+      shell: bash
+      run: |
+        path="monmoncafe-v${{ inputs.version-name }}.apk"
+        mv android/app/build/outputs/apk/debug/app-debug.apk "$path"
+        echo "path=$path" >> "$GITHUB_OUTPUT"
