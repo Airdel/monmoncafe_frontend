@@ -48,6 +48,7 @@ const PRIORITIES: { key: Priority; label: string; active: string }[] = [
 ];
 
 const inputClass = 'w-full px-4 py-3 bg-ink/5 border border-ink/10 rounded-xl text-ink focus:border-primary/50 focus:outline-none placeholder:text-ink/20';
+const inlineInputClass = inputClass.replace('w-full ', '');
 const selectClass = `${inputClass} appearance-none cursor-pointer [&>option]:bg-raised [&>option]:text-ink`;
 const labelClass = 'text-ink/50 text-xs font-label uppercase tracking-widest block mb-2';
 const saveButton = 'w-full py-3 rounded-xl bg-cta text-on-primary font-bold flex items-center justify-center gap-2 disabled:opacity-50';
@@ -57,6 +58,11 @@ const qty = (value: number | string) => Number(value).toLocaleString('es-MX', { 
 // Mirrors the backend: grams/kilograms and millilitres/litres convert on their own
 const KIND: Record<string, string> = { GRAMS: 'mass', KILOGRAMS: 'mass', MILLILITERS: 'volume', LITERS: 'volume', PIECES: 'count' };
 const BASE: Record<string, number> = { GRAMS: 1, KILOGRAMS: 1000, MILLILITERS: 1, LITERS: 1000, PIECES: 1 };
+
+const round = (value: number, decimals: number) => Math.round(value * 10 ** decimals) / 10 ** decimals;
+
+/** The amount a price is usually quoted for: per kilo or litre for g/ml, per one otherwise. */
+const defaultPriceAmount = (unit: string) => (unit === 'GRAMS' || unit === 'MILLILITERS' ? 1000 : 1);
 
 /** How many `from` units make one `to` unit, when it is known. */
 const knownFactor = (from: string, to: string) => (KIND[from] === KIND[to] ? BASE[to] / BASE[from] : null);
@@ -88,21 +94,34 @@ export function IngredientFormModal({ ingredient, suppliers, onClose, onSaved, o
     minStock: ingredient ? String(Number(ingredient.minStock)) : '',
     maxStock: ingredient?.maxStock != null ? String(Number(ingredient.maxStock)) : '',
   });
+  // Typed as "paid $X for Y units": a cost per gram or ml is too small to type
+  const initialCost = Number(ingredient?.currentCostPerUnit ?? 0);
+  const [cost, setCost] = useState(() => {
+    const amount = defaultPriceAmount(ingredient?.unit ?? 'GRAMS');
+    return { price: initialCost > 0 ? String(round(initialCost * amount, 2)) : '', amount: String(amount) };
+  });
   const [saving, setSaving] = useState(false);
 
   const min = Number(form.minStock || 0);
   const max = form.maxStock === '' ? null : Number(form.maxStock);
   const rangeError = max !== null && max < min ? 'El máximo no puede ser menor que el mínimo' : '';
   const unit = unitLabel(form.unit);
+  const costPrice = Number(cost.price);
+  const costAmount = Number(cost.amount);
+  const costError = cost.price.trim() !== '' && !(costPrice >= 0 && costAmount > 0) ? 'Escribe cuánto pagaste y por cuánto' : '';
+  const costPerUnit = cost.price.trim() !== '' && !costError ? round(costPrice / costAmount, 4) : null;
+  // Only sent when it changed, so the price history gets no repeated entries
+  const costChanged = costPerUnit !== null && costPerUnit !== round(initialCost, 4);
 
   const save = async () => {
-    if (!form.name.trim() || rangeError) return;
+    if (!form.name.trim() || rangeError || costError) return;
     const body = {
       name: form.name.trim(),
       supplierId: form.supplierId || null,
       priority: form.priority,
       minStock: min,
       maxStock: max,
+      ...(costChanged && { currentCostPerUnit: costPerUnit }),
     };
     setSaving(true);
     try {
@@ -180,7 +199,23 @@ export function IngredientFormModal({ ingredient, suppliers, onClose, onSaved, o
           {rangeError || 'Con el stock en el mínimo o debajo, el insumo sale como "Stock bajo" y entra a la lista de compras, que lo resurte hasta el máximo (sin máximo, el doble del mínimo).'}
         </p>
 
-        <button onClick={save} disabled={saving || !form.name.trim() || !!rangeError} className={saveButton}>
+        <div>
+          <label className={labelClass} htmlFor="ingredient-cost">Precio de compra</label>
+          <div className="flex items-center gap-2">
+            <span className="text-ink/50 text-sm">$</span>
+            <input id="ingredient-cost" type="number" min={0} step="0.5" inputMode="decimal" value={cost.price} onChange={e => setCost({ ...cost, price: e.target.value })} placeholder="0.00" className={`${inlineInputClass} flex-1 min-w-0 font-mono`} />
+            <span className="text-ink/50 text-sm shrink-0">por</span>
+            <input aria-label={`Cantidad en ${unit}`} type="number" min={0} inputMode="decimal" value={cost.amount} onChange={e => setCost({ ...cost, amount: e.target.value })} className={`${inlineInputClass} w-24 shrink-0 font-mono`} />
+            <span className="text-ink/50 text-sm shrink-0">{unit}</span>
+          </div>
+        </div>
+        <p className={`text-xs -mt-2 ${costError ? 'text-error' : 'text-ink/40'}`}>
+          {costError || (costPerUnit !== null
+            ? `Queda en $${costPerUnit.toFixed(4)} por ${unit}. Las recetas usan este costo; cada compra registrada lo vuelve a actualizar.`
+            : 'Opcional. Si lo dejas vacío, el costo sale de la primera compra que registres.')}
+        </p>
+
+        <button onClick={save} disabled={saving || !form.name.trim() || !!rangeError || !!costError} className={saveButton}>
           {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />} Guardar
         </button>
       </div>

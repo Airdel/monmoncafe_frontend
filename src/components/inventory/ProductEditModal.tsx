@@ -33,10 +33,11 @@ const labelClass = 'text-ink/50 text-xs font-label uppercase tracking-widest blo
  * Name, POS category, price, visibility and photo of a product (the recipe is edited separately).
  * Without `product` it creates a new one.
  */
-export function ProductEditModal({ product, onClose, onSaved }: {
+export function ProductEditModal({ product, onClose, onSaved, onDeleted }: {
   product?: EditableProduct;
   onClose: () => void;
   onSaved: (product: EditableProduct) => void;
+  onDeleted?: (id: number) => void;
 }) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [name, setName] = useState(product?.name ?? '');
@@ -50,6 +51,7 @@ export function ProductEditModal({ product, onClose, onSaved }: {
   const [photoPreview, setPhotoPreview] = useState<string | null>(productImageSrc(product?.imageUrl));
   const [processing, setProcessing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -167,6 +169,29 @@ export function ProductEditModal({ product, onClose, onSaved }: {
     }
   };
 
+  /** Needs the server: a product with past sales is hidden instead, so reports stay the same. */
+  const remove = async () => {
+    if (!product) return;
+    const ok = await confirm({
+      title: 'Eliminar receta',
+      message: `¿Eliminar "${product.name}"? Deja de aparecer en Recetas y en el POS.\n\nSi ya se vendió, sus ventas, cortes y reportes se quedan igual.`,
+      confirmLabel: 'Eliminar',
+      tone: 'danger',
+    });
+    if (!ok) return;
+    setDeleting(true);
+    setError('');
+    try {
+      const result = unwrap<{ deleted: 'removed' | 'archived' }>(await api.delete(`/products/${product.id}`));
+      toast.success(result.deleted === 'archived' ? 'Receta eliminada; sus ventas pasadas se conservan' : 'Receta eliminada');
+      onDeleted?.(product.id);
+    } catch (err) {
+      setError(getErrorMessage(err, 'No se pudo eliminar; necesita conexión con el servidor'));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <Modal title={product ? 'Editar producto' : 'Nueva receta'} onClose={onClose}>
       <div className="space-y-5">
@@ -258,11 +283,22 @@ export function ProductEditModal({ product, onClose, onSaved }: {
 
         <button
           onClick={save}
-          disabled={saving || processing || !name.trim() || !categoryId || !priceValid}
+          disabled={saving || deleting || processing || !name.trim() || !categoryId || !priceValid}
           className="w-full py-3 rounded-xl bg-cta text-on-primary font-bold flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />} {product ? 'Guardar' : 'Crear y agregar ingredientes'}
         </button>
+
+        {product && onDeleted && (
+          <button
+            type="button"
+            onClick={remove}
+            disabled={saving || deleting}
+            className="w-full py-2.5 rounded-xl text-error/80 hover:text-error hover:bg-error/10 text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} Eliminar receta
+          </button>
+        )}
       </div>
     </Modal>
   );
