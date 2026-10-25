@@ -6,6 +6,7 @@ import { DARK_THEMES, DEFAULT_THEME, DYNAMIC_THEME, isThemeId, type ThemeId } fr
 import { DEFAULT_DECOR, isDecorMode, resolveSeason, type DecorMode, type SeasonId } from '../lib/seasons';
 import { DEFAULT_SEED, dynamicTokens, isHexColor } from '../lib/dynamicColor';
 import { getWallpaperSeed } from '../lib/systemColors';
+import { isSoundLevel, isSoundStyle, type SoundLevel, type SoundStyle } from '../lib/soundSettings';
 
 /** Light/dark for the "Mi fondo" theme; 'auto' follows the phone's dark mode. */
 export type DynamicMode = 'auto' | 'light' | 'dark';
@@ -33,6 +34,13 @@ interface ThemeState {
   setSeedSource: (seedSource: SeedSource) => void;
   setDynamicMode: (dynamicMode: DynamicMode) => void;
   setHaptics: (haptics: boolean) => void;
+  soundLevel: SoundLevel;
+  soundStyle: SoundStyle;
+  /** 0-100 */
+  soundVolume: number;
+  setSoundLevel: (soundLevel: SoundLevel) => void;
+  setSoundStyle: (soundStyle: SoundStyle) => void;
+  setSoundVolume: (soundVolume: number) => void;
 }
 
 export const useThemeStore = create<ThemeState>()(
@@ -52,6 +60,12 @@ export const useThemeStore = create<ThemeState>()(
       setSeedSource: (seedSource) => set({ seedSource }),
       setDynamicMode: (dynamicMode) => set({ dynamicMode }),
       setHaptics: (haptics) => set({ haptics }),
+      soundLevel: 'important',
+      soundStyle: 'cafe',
+      soundVolume: 70,
+      setSoundLevel: (soundLevel) => set({ soundLevel }),
+      setSoundStyle: (soundStyle) => set({ soundStyle }),
+      setSoundVolume: (soundVolume) => set({ soundVolume }),
     }),
     {
       name: 'theme',
@@ -67,6 +81,9 @@ export const useThemeStore = create<ThemeState>()(
           seedSource: isSeedSource(stored.seedSource) ? stored.seedSource : current.seedSource,
           dynamicMode: isDynamicMode(stored.dynamicMode) ? stored.dynamicMode : current.dynamicMode,
           haptics: typeof stored.haptics === 'boolean' ? stored.haptics : current.haptics,
+          soundLevel: isSoundLevel(stored.soundLevel) ? stored.soundLevel : current.soundLevel,
+          soundStyle: isSoundStyle(stored.soundStyle) ? stored.soundStyle : current.soundStyle,
+          soundVolume: typeof stored.soundVolume === 'number' && stored.soundVolume >= 0 && stored.soundVolume <= 100 ? stored.soundVolume : current.soundVolume,
         };
       },
     },

@@ -18,6 +18,7 @@ import { categoryEmoji, type ProductCategory as Category } from '../lib/categori
 import * as motion from 'motion/react-client';
 import { AnimatePresence, useDragControls } from 'motion/react';
 import { haptic } from '../lib/haptics';
+import { playSound } from '../lib/sounds';
 import { useBackHandler } from '../lib/backButton';
 
 interface Product {
@@ -140,6 +141,7 @@ export function PosPage() {
 
   const addToCart = (product: Product, options: ModifierOption[] = []) => {
     haptic.tap();
+    playSound('add');
     const key = lineKey(product.id, options);
     setCart(prev => {
       const existing = prev.find(item => item.key === key);
@@ -152,6 +154,7 @@ export function PosPage() {
 
   const removeFromCart = (key: string) => {
     haptic.tap();
+    playSound('remove');
     if (cart.find(item => item.key === key)?.quantity === 1) {
       // The line goes away, and its discount with it
       setDiscounts(prev => {
@@ -203,6 +206,7 @@ export function PosPage() {
       lines: cart.map(item => ({ quantity: item.quantity, name: item.product.name, options: item.options.map(o => o.name) })),
       cashier,
     });
+    playSound(payload.payLater ? 'later' : 'sale');
     toast.info(
       payload.payLater
         ? 'Está en Comandas por cobrar y se enviará sola cuando vuelva la conexión.'
@@ -241,6 +245,7 @@ export function PosPage() {
       const shortages = sale.stockWarnings?.length
         ? ` Ojo: el inventario quedó en negativo en ${describeShortages(sale.stockWarnings)}.`
         : '';
+      playSound(payLater ? 'later' : 'sale');
       if (payLater) toast.info(`Se cobra después desde Comandas. Comanda #${sale.id}.${shortages}`, 'Pedido enviado a comandas');
       else toast.success(`Comanda #${sale.id}.${shortages}`, '¡Venta registrada!');
       clearOrder();

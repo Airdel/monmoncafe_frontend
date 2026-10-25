@@ -6,6 +6,8 @@ import { SEED_PRESETS, dynamicTokens } from '../../lib/dynamicColor';
 import { resolveDynamic, useThemeStore, useWallpaperAvailable, type DynamicMode } from '../../store/theme';
 import { Modal } from './Modal';
 import { APP_VERSION } from '../../lib/version';
+import { SOUND_LEVELS, SOUND_STYLES } from '../../lib/soundSettings';
+import { previewSound } from '../../lib/sounds';
 
 /** Theme chooser; each card renders a small live preview using that theme's tokens. */
 export function ThemePicker({ onClose }: { onClose: () => void }) {
@@ -24,6 +26,12 @@ export function ThemePicker({ onClose }: { onClose: () => void }) {
   const setDynamicMode = useThemeStore(state => state.setDynamicMode);
   const haptics = useThemeStore(state => state.haptics);
   const setHaptics = useThemeStore(state => state.setHaptics);
+  const soundLevel = useThemeStore(state => state.soundLevel);
+  const setSoundLevel = useThemeStore(state => state.setSoundLevel);
+  const soundStyle = useThemeStore(state => state.soundStyle);
+  const setSoundStyle = useThemeStore(state => state.setSoundStyle);
+  const soundVolume = useThemeStore(state => state.soundVolume);
+  const setSoundVolume = useThemeStore(state => state.setSoundVolume);
   const wallpaperAvailable = useWallpaperAvailable();
   const usingWallpaper = wallpaperAvailable && seedSource === 'wallpaper';
 
@@ -187,6 +195,55 @@ export function ThemePicker({ onClose }: { onClose: () => void }) {
         />
         <span>Vibración suave al agregar productos, cobrar o cuando algo sale mal (en el celular).</span>
       </label>
+
+      <h4 className="font-headline font-bold text-ink mt-6 mb-1">Sonidos</h4>
+      <p className="text-ink/60 text-sm mb-3">Solo importantes: venta, pedido a comandas, comanda nueva o lista, errores y corte. Todos: también al agregar y quitar productos.</p>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Cuándo suenan">
+        {SOUND_LEVELS.map(option => {
+          const active = soundLevel === option.id;
+          return (
+            <button key={option.id} onClick={() => setSoundLevel(option.id)} aria-pressed={active} className={`h-11 px-4 rounded-full border-2 text-sm font-bold transition-colors ${active ? 'border-primary bg-primary/10 text-primary' : 'border-ink/10 hover:border-primary/40'}`}>
+              {option.name}
+            </button>
+          );
+        })}
+      </div>
+      {soundLevel !== 'off' && (
+        <>
+          <div className="flex flex-wrap gap-2 mt-3" role="group" aria-label="Estilo de sonido">
+            {SOUND_STYLES.map(option => {
+              const active = soundStyle === option.id;
+              return (
+                <button
+                  key={option.id}
+                  onClick={() => { setSoundStyle(option.id); previewSound(option.id); }}
+                  aria-pressed={active}
+                  className={`h-11 px-4 rounded-full border-2 text-sm font-bold transition-colors ${active ? 'border-primary bg-primary/10 text-primary' : 'border-ink/10 hover:border-primary/40'}`}
+                >
+                  {option.name}
+                </button>
+              );
+            })}
+          </div>
+          <label className="flex items-center gap-3 mt-3 text-sm">
+            <span className="font-bold">Volumen</span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={soundVolume}
+              onChange={e => setSoundVolume(Number(e.target.value))}
+              onPointerUp={() => previewSound(soundStyle)}
+              onKeyUp={() => previewSound(soundStyle)}
+              className="flex-1 max-w-xs accent-[rgb(var(--c-primary))]"
+              aria-label="Volumen de los sonidos"
+            />
+            <span className="font-mono w-10 text-right">{soundVolume}%</span>
+          </label>
+          <p className="text-ink/50 text-xs mt-2">En Android usan el volumen de multimedia; el modo silencio del celular no los calla.</p>
+        </>
+      )}
       {APP_VERSION && <p className="text-center text-ink/40 text-xs mt-4">Versión {APP_VERSION}</p>}
     </Modal>
   );

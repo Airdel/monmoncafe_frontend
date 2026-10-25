@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { getErrorMessage } from './errors';
 import { haptic } from './haptics';
+import { playSound } from './sounds';
 
 // In-app replacements for window.alert/confirm, styled with the active theme.
 // Call them from anywhere (no hook needed); <DialogHost /> in App renders them.
@@ -61,7 +62,10 @@ function show(kind: ToastKind, message: string, title?: string) {
   const id = nextToastId++;
   useDialogStore.setState(s => ({ toasts: [...s.toasts.slice(-3), { id, kind, title, message }] }));
   if (kind === 'success') haptic.success();
-  else if (kind === 'error') haptic.error();
+  else if (kind === 'error') {
+    haptic.error();
+    playSound('error');
+  }
   setTimeout(() => dismissToast(id), DURATION[kind]);
 }
 
