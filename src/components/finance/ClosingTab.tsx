@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, CloudOff, Loader2, Lock, RefreshCw, Smartp
 import { api } from '../../lib/api';
 import { getErrorMessage } from '../../lib/errors';
 import { confirm, notifyError, toast } from '../../lib/dialogs';
+import { playSound } from '../../lib/sounds';
 import { formatDay, formatMoney, todayISO } from '../../lib/format';
 import { cachedGet, sendOrQueue } from '../../lib/offline';
 import { useConnectionStore } from '../../store/connection';
@@ -89,6 +90,7 @@ export function ClosingTab({ onClosed, canManage }: { onClosed: () => void; canM
     try {
       const sent = await sendOrQueue('/closings', { date, notes: notes.trim() || undefined }, `Corte del ${formatDay(date)}`);
       setNotes('');
+      playSound('closing');
       if (sent.queued) {
         toast.success('Sin conexión: el corte quedó guardado en este dispositivo y la PC lo hará cuando vuelva la conexión.');
         return;

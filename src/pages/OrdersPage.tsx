@@ -7,6 +7,7 @@ import { cachedGet } from '../lib/offline';
 import { useConnectionStore } from '../store/connection';
 import { useOfflineSales, type QueuedSale } from '../store/offlineSales';
 import { confirm, notifyError } from '../lib/dialogs';
+import { playSound } from '../lib/sounds';
 import { formatMoney } from '../lib/format';
 import { Modal } from '../components/ui/Modal';
 import { CancelSaleDialog } from '../components/sales/CancelSaleDialog';
@@ -63,23 +64,6 @@ function minutesAgo(iso: string) {
   return `hace ${Math.floor(mins / 60)} h ${mins % 60} min`;
 }
 
-/** Short beep so the bar notices a new order without watching the screen. */
-function beep() {
-  try {
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.frequency.value = 880;
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.4);
-  } catch {
-    // Audio blocked until the user interacts with the page
-  }
-}
-
 /** Comandas: what was ordered, with its options and notes, until it is handed out. */
 export function OrdersPage() {
   const [serverOrders, setOrders] = useState<Order[]>([]);
@@ -108,8 +92,9 @@ export function OrdersPage() {
     try {
       // The last list stays on the device for when the server is off
       const list = await cachedGet<Order[]>('/sales/orders');
-      // Ring only for orders that arrived after the first load
-      if (seen.current && list.some(o => !seen.current!.has(o.id))) beep();
+      // Ring only for orders that arrived after the first load, so the bar
+      // notices without watching the screen
+      if (seen.current && list.some(o => !seen.current!.has(o.id))) playSound('newOrder');
       seen.current = new Set(list.map(o => o.id));
       setOrders(list);
     } catch (err) {
@@ -126,6 +111,7 @@ export function OrdersPage() {
   }, [load]);
 
   const setStatus = async (order: Order, orderStatus: OrderStatus) => {
+    if (orderStatus === 'READY') playSound('ready');
     if (order.local) {
       // Goes to the server together with the sale
       useOfflineSales.getState().update(order.local.clientId, s => ({ ...s, payload: { ...s.payload, orderStatus } }));
