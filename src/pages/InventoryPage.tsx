@@ -307,6 +307,12 @@ export function InventoryPage() {
     setEditingProduct(false);
   };
 
+  const productDeleted = (id: number) => {
+    setProducts(prev => prev.filter(p => p.id !== id));
+    selectProduct(null);
+    loadAll();
+  };
+
   // A new product opens straight into its recipe so its insumos can be added
   const productCreated = (created: EditableProduct) => {
     setCreatingProduct(false);
@@ -798,7 +804,7 @@ export function InventoryPage() {
       )}
 
       {editingProduct && selectedProduct && (
-        <ProductEditModal product={selectedProduct} onClose={() => setEditingProduct(false)} onSaved={productSaved} />
+        <ProductEditModal product={selectedProduct} onClose={() => setEditingProduct(false)} onSaved={productSaved} onDeleted={productDeleted} />
       )}
       {creatingProduct && (
         <ProductEditModal onClose={() => setCreatingProduct(false)} onSaved={productCreated} />
