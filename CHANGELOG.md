@@ -10,7 +10,9 @@ Cada cambio se anota en **Sin publicar** en el mismo PR que lo hace. Al publicar
 
 ## [Sin publicar]
 
-### Inventario
+### Agregado
+- **Sonidos**: campanitas al registrar una venta, al mandar un pedido a comandas, cuando llega una comanda nueva o se marca lista, en errores y al guardar el corte. En Navidad la venta suena con cascabeles.
+- En **Temas › Sonidos**: Apagados, Solo importantes (por defecto) o Todos (también al agregar y quitar productos), estilo **Cafetería** o **Burbujas** y volumen. Se guarda en cada dispositivo.
 - **Eliminar receta** desde Recetas › Editar producto. Si ya se vendió, deja de aparecer en Recetas y en el POS, pero sus ventas, cortes y reportes se quedan igual. Necesita conexión con la PC.
 - **Precio de compra** en Nuevo/Editar insumo: escribe cuánto pagaste por una cantidad (por ejemplo $420 por 1000 g) y el costo por unidad se actualiza al momento, sin registrar una compra. Las recetas usan ese costo; cada compra registrada lo vuelve a actualizar.
 

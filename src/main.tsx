@@ -14,10 +14,12 @@ import { Capacitor } from '@capacitor/core'
 import { initTheme, refreshWallpaperSeed } from './store/theme'
 import { initRipples } from './lib/ripple'
 import { initBackButton } from './lib/backButton'
+import { initSounds } from './lib/sounds'
 
 initTheme()
 initRipples()
 initBackButton()
+initSounds()
 // The wallpaper may change while the app is in the background
 if (Capacitor.isNativePlatform()) NativeApp.addListener('resume', refreshWallpaperSeed).catch(() => {})
 
