@@ -10,6 +10,8 @@ Cada cambio se anota en **Sin publicar** en el mismo PR que lo hace. Al publicar
 
 ## [Sin publicar]
 
+## [2.1.0] - 2026-10-24
+
 ### Agregado
 - **Sonidos**: campanitas al registrar una venta, al mandar un pedido a comandas, cuando llega una comanda nueva o se marca lista, en errores y al guardar el corte. En Navidad la venta suena con cascabeles.
 - En **Temas › Sonidos**: Apagados, Solo importantes (por defecto) o Todos (también al agregar y quitar productos), estilo **Cafetería** o **Burbujas** y volumen. Se guarda en cada dispositivo.
