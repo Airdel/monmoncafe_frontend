@@ -21,6 +21,8 @@ jobs:
   release:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    outputs:
+      version: ${{ steps.version.outputs.name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -47,6 +49,13 @@ jobs:
           keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
 
+      # Lo recoge el job "nas" para guardarlo en el servidor
+      - uses: actions/upload-artifact@v4
+        with:
+          name: monmoncafe-v${{ steps.version.outputs.name }}
+          path: ${{ steps.build.outputs.apk }}
+          retention-days: 7
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -63,3 +72,20 @@ jobs:
             --target "$(git rev-parse HEAD)" \
             --title "MonMon Café $VERSION" \
             --notes-file release-notes.md
+
+  # Guarda cada versión publicada en la carpeta del NAS del servidor 24/7
+  # (recurso compartido "nas", carpeta apk/versiones). Estas no se borran nunca.
+  nas:
+    needs: release
+    runs-on: [self-hosted, d-virtual-frontend]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: monmoncafe-v${{ needs.release.outputs.version }}
+          path: ${{ runner.temp }}/apk
+
+      - name: Copiar al NAS
+        run: |
+          dest="$HOME/nas/apk/versiones"
+          mkdir -p "$dest"
+          cp -v "$RUNNER_TEMP"/apk/*.apk "$dest/"
