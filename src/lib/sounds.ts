@@ -1,6 +1,7 @@
 import { resolveSeason } from './seasons';
 import { useThemeStore } from '../store/theme';
 import type { SoundStyle } from './soundSettings';
+import type { DrinkKind } from './illustrations';
 
 // Short sounds for key moments, synthesized with Web Audio: no audio files,
 // so they are original, weigh nothing and work offline (web and Android).
@@ -66,6 +67,13 @@ function pop(from: number, to: number, at = 0, gain = 0.3) {
   note(from, at, { glideTo: to, dur: 0.14, gain, attack: 0.003 });
 }
 
+/** Two coins landing in the drawer, closing a charged sale. */
+function coins(at = 0) {
+  bell(3951, at, 0.06, 0.18);
+  bell(4699, at + 0.07, 0.05, 0.16);
+  bell(4186, at + 0.15, 0.045, 0.2);
+}
+
 /** Sleigh bells: three bursts of filtered noise. */
 function jingle(at = 0) {
   const a = audio();
@@ -88,11 +96,47 @@ function jingle(at = 0) {
   }
 }
 
+/** A burst of filtered noise: fizz, ice or a blender, depending on the filter. */
+function noise(at: number, dur: number, { type = 'bandpass', from = 3000, to, q = 1, gain = 0.2 }: { type?: BiquadFilterType; from?: number; to?: number; q?: number; gain?: number }) {
+  const a = audio();
+  if (!a) return;
+  const t = a.ctx.currentTime + at;
+  const buffer = a.ctx.createBuffer(1, Math.floor(a.ctx.sampleRate * dur), a.ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let j = 0; j < data.length; j++) data[j] = Math.random() * 2 - 1;
+  const source = a.ctx.createBufferSource();
+  const filter = a.ctx.createBiquadFilter();
+  const env = a.ctx.createGain();
+  source.buffer = buffer;
+  filter.type = type;
+  filter.Q.value = q;
+  filter.frequency.setValueAtTime(from, t);
+  if (to) filter.frequency.exponentialRampToValueAtTime(to, t + dur);
+  env.gain.setValueAtTime(0.0001, t);
+  env.gain.exponentialRampToValueAtTime(gain, t + 0.02);
+  env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  source.connect(filter).connect(env).connect(a.out);
+  source.start(t);
+}
+
+/**
+ * Adding a drink with a drawing sounds like the drink, in both styles: a cup
+ * on its saucer, ice, soda bubbles or a quick blender. Only with "Todos".
+ */
+const DRINK_SOUNDS: Record<DrinkKind, () => void> = {
+  hot: () => { bell(1175, 0, 0.12, 0.35); bell(1568, 0.07, 0.07, 0.25); },
+  tea: () => { bell(1397, 0, 0.1, 0.4); bell(2093, 0.1, 0.06, 0.3); },
+  cold: () => { bell(2637, 0, 0.07, 0.16); bell(3136, 0.07, 0.06, 0.14); bell(2794, 0.13, 0.05, 0.13); },
+  soda: () => { noise(0, 0.35, { type: 'highpass', from: 5000, gain: 0.08 }); pop(900, 1600, 0.04, 0.14); pop(1100, 1900, 0.12, 0.12); pop(1300, 2200, 0.2, 0.1); },
+  frappe: () => { noise(0, 0.28, { from: 500, to: 2600, q: 4, gain: 0.22 }); pop(700, 1300, 0.26, 0.12); },
+  extra: () => { noise(0, 0.22, { from: 1500, to: 600, q: 2, gain: 0.14 }); },
+};
+
 const SOUNDS: Record<SoundStyle, Record<SoundId | 'xmas', () => void>> = {
   cafe: {
     add: () => bell(1760, 0, 0.12, 0.35),
     remove: () => bell(1318, 0, 0.1, 0.3),
-    sale: () => { bell(1047, 0, 0.2); bell(1319, 0.09, 0.2); bell(1568, 0.18, 0.24, 1.4); },
+    sale: () => { bell(1047, 0, 0.2); bell(1319, 0.09, 0.2); bell(1568, 0.18, 0.24, 1.4); coins(0.34); },
     later: () => { bell(880, 0, 0.18, 0.8); bell(1175, 0.12, 0.18, 0.9); },
     newOrder: () => { bell(2093, 0, 0.3, 1.6); bell(2093, 0.32, 0.22, 1.6); },
     ready: () => { bell(1319, 0, 0.2, 0.7); bell(1760, 0.13, 0.24, 1.2); },
@@ -103,7 +147,7 @@ const SOUNDS: Record<SoundStyle, Record<SoundId | 'xmas', () => void>> = {
   burbujas: {
     add: () => pop(500, 1000),
     remove: () => pop(800, 420),
-    sale: () => { pop(500, 900); pop(650, 1150, 0.09); pop(800, 1500, 0.18, 0.34); },
+    sale: () => { pop(500, 900); pop(650, 1150, 0.09); pop(800, 1500, 0.18, 0.34); coins(0.32); },
     later: () => { pop(450, 750); pop(550, 950, 0.12); },
     newOrder: () => { pop(700, 1300, 0, 0.36); pop(700, 1300, 0.18, 0.36); pop(900, 1700, 0.36, 0.34); },
     ready: () => { pop(600, 1000); pop(800, 1400, 0.12, 0.34); },
@@ -113,10 +157,11 @@ const SOUNDS: Record<SoundStyle, Record<SoundId | 'xmas', () => void>> = {
   },
 };
 
-/** Plays a sound if this device's level allows it. */
-export function playSound(id: SoundId) {
+/** Plays a sound if this device's level allows it; `drink` gives "add" the drink's own sound. */
+export function playSound(id: SoundId, drink?: DrinkKind | null) {
   const { soundLevel, soundStyle, decor } = useThemeStore.getState();
   if (soundLevel === 'off' || (soundLevel === 'important' && MINOR.has(id))) return;
+  if (id === 'add' && drink) return DRINK_SOUNDS[drink]();
   // Sleigh bells on sales while the Christmas decoration is showing
   const variant = id === 'sale' && resolveSeason(decor) === 'navidad' ? 'xmas' : id;
   SOUNDS[soundStyle][variant]();

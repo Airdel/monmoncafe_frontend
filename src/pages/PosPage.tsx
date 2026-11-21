@@ -10,6 +10,8 @@ import { NO_DISCOUNTS, orderTotals, type OrderDiscounts } from '../lib/discounts
 import { OptionsPicker } from '../components/sales/OptionsPicker';
 import { DiscountDialog } from '../components/sales/DiscountDialog';
 import { productImageSrc } from '../lib/images';
+import { bounceDrink, drinkKind, illustrationSvg } from '../lib/illustrations';
+import { DrinkArt } from '../components/ui/DrinkArt';
 import { cachedGet, isOfflineError, QUICK_TIMEOUT_MS, withQueuedProductEdits } from '../lib/offline';
 import { useConnectionStore } from '../store/connection';
 import { newClientId, useOfflineSales, type SalePayload } from '../store/offlineSales';
@@ -28,8 +30,13 @@ interface Product {
   categoryId: number;
   isActive: boolean;
   imageUrl?: string | null;
+  /** Animated drawing shown instead of the photo (older servers leave it out). */
+  illustration?: string | null;
   modifierGroups?: { groupId: number }[];
 }
+
+/** The drawing wins when this app knows it; a key from a newer app falls back to the photo. */
+const drawingOf = (p: Product) => (illustrationSvg(p.illustration) ? p.illustration! : null);
 
 interface CartLine {
   /** Product id plus chosen options, so a latte with oat milk is its own line. */
@@ -118,6 +125,7 @@ export function PosPage() {
       setProducts(active);
       // Load every photo once so the browser keeps them for when there is no connection
       for (const p of active) {
+        if (drawingOf(p)) continue;
         const src = productImageSrc(p.imageUrl);
         if (src) new Image().src = src;
       }
@@ -141,7 +149,7 @@ export function PosPage() {
 
   const addToCart = (product: Product, options: ModifierOption[] = []) => {
     haptic.tap();
-    playSound('add');
+    playSound('add', drinkKind(drawingOf(product)));
     const key = lineKey(product.id, options);
     setCart(prev => {
       const existing = prev.find(item => item.key === key);
@@ -207,6 +215,7 @@ export function PosPage() {
       cashier,
     });
     playSound(payload.payLater ? 'later' : 'sale');
+    haptic.success();
     toast.info(
       payload.payLater
         ? 'Está en Comandas por cobrar y se enviará sola cuando vuelva la conexión.'
@@ -246,6 +255,7 @@ export function PosPage() {
         ? ` Ojo: el inventario quedó en negativo en ${describeShortages(sale.stockWarnings)}.`
         : '';
       playSound(payLater ? 'later' : 'sale');
+      if (payLater) haptic.success();
       if (payLater) toast.info(`Se cobra después desde Comandas. Comanda #${sale.id}.${shortages}`, 'Pedido enviado a comandas');
       else toast.success(`Comanda #${sale.id}.${shortages}`, '¡Venta registrada!');
       clearOrder();
@@ -314,7 +324,10 @@ export function PosPage() {
              <div className="col-span-full flex justify-center py-20">
                <Loader2 className="w-8 h-8 animate-spin text-primary" />
              </div>
-          ) : filteredProducts.map((product, idx) => (
+          ) : filteredProducts.map((product, idx) => {
+            const drawing = drawingOf(product);
+            const photo = !drawing && product.imageUrl ? productImageSrc(product.imageUrl) : null;
+            return (
             <motion.button
               key={product.id}
               type="button"
@@ -322,17 +335,20 @@ export function PosPage() {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: Math.min(idx, 12) * 0.04 }}
               whileTap={{ scale: 0.96 }}
-              onClick={() => selectProduct(product)}
+              onClick={e => { bounceDrink(e.currentTarget); selectProduct(product); }}
               className="glass-panel group text-left border-ink/5 hover:border-primary/50 transition-colors flex flex-col overflow-hidden relative"
             >
-              <div className="h-24 sm:h-32 lg:h-36 w-full shrink-0 overflow-hidden bg-primary/5">
-                {product.imageUrl ? (
+              <div className="h-28 sm:h-32 lg:h-36 w-full shrink-0 overflow-hidden bg-primary/5">
+                {drawing ? (
+                  <DrinkArt illustration={drawing} animated className="w-full h-full" />
+                ) : photo ? (
+                  // Real photos fill the whole tile, with the name over a dark fade so it always reads
                   <img
-                    src={productImageSrc(product.imageUrl) ?? undefined}
+                    src={photo}
                     alt=""
                     loading="lazy"
                     onError={e => { e.currentTarget.style.visibility = 'hidden'; }}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500"
+                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-all duration-500"
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-primary/30 group-hover:scale-110 transition-all duration-500">
@@ -341,12 +357,16 @@ export function PosPage() {
                 )}
               </div>
 
-              <div className="p-3 sm:p-4 flex-1 flex flex-col justify-between gap-1">
-                <h3 className="font-headline font-bold text-ink text-sm leading-tight line-clamp-2">{product.name}</h3>
-                <p className="font-mono text-secondary font-semibold text-base sm:text-lg">{formatMoney(Number(product.sellingPrice))}</p>
+              <div className={cn(
+                'p-3 sm:p-4 flex-1 flex flex-col justify-between gap-1 relative',
+                photo && 'pt-8 -mt-6 bg-gradient-to-t from-black/75 via-black/50 to-transparent'
+              )}>
+                <h3 className={cn('font-headline font-bold text-sm leading-tight line-clamp-2', photo ? 'text-white' : 'text-ink')}>{product.name}</h3>
+                <p className={cn('font-mono font-semibold text-base sm:text-lg', photo ? 'text-white' : 'text-secondary')}>{formatMoney(Number(product.sellingPrice))}</p>
               </div>
             </motion.button>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -428,7 +448,9 @@ export function PosPage() {
             cart.map((item) => (
               <div key={item.key} className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl bg-primary/10 overflow-hidden shrink-0 flex items-center justify-center">
-                  {item.product.imageUrl
+                  {drawingOf(item.product)
+                    ? <DrinkArt illustration={drawingOf(item.product)!} className="w-full h-full" />
+                    : item.product.imageUrl
                     ? <img src={productImageSrc(item.product.imageUrl) ?? undefined} alt="" className="w-full h-full object-cover" />
                     : <span className="font-headline font-bold text-primary/60">{item.product.name.substring(0, 2).toUpperCase()}</span>}
                 </div>

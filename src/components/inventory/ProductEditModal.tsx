@@ -8,6 +8,8 @@ import { productImageSrc, resizeImage } from '../../lib/images';
 import { unwrap } from '../../lib/unwrap';
 import { cn } from '../../lib/cn';
 import { Modal } from '../ui/Modal';
+import { DrinkArt } from '../ui/DrinkArt';
+import { ILLUSTRATIONS, illustrationSvg } from '../../lib/illustrations';
 
 export interface EditableProduct {
   id: number;
@@ -18,6 +20,8 @@ export interface EditableProduct {
   /** Sold for a supplier: counts in inventory, not in the shop's sales (older servers leave it out). */
   isConsignment?: boolean;
   imageUrl?: string | null;
+  /** Animated drawing shown on the POS instead of the photo (older servers leave it out). */
+  illustration?: string | null;
   category?: { id?: number; name: string };
 }
 
@@ -49,6 +53,9 @@ export function ProductEditModal({ product, onClose, onSaved, onDeleted }: {
   // undefined = keep current photo, null = remove it, Blob = upload this one
   const [photo, setPhoto] = useState<Blob | null | undefined>(undefined);
   const [photoPreview, setPhotoPreview] = useState<string | null>(productImageSrc(product?.imageUrl));
+  // '' = show the photo; otherwise the animated drawing's key
+  const initialDrawing = illustrationSvg(product?.illustration) ? product!.illustration! : '';
+  const [drawing, setDrawing] = useState(initialDrawing);
   const [processing, setProcessing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -77,6 +84,8 @@ export function ProductEditModal({ product, onClose, onSaved, onDeleted }: {
       const resized = await resizeImage(file);
       setPhoto(resized);
       setPhotoPreview(URL.createObjectURL(resized));
+      // A new photo is what they want to see
+      setDrawing('');
     } catch (err) {
       setError(getErrorMessage(err, 'No se pudo leer la imagen'));
     } finally {
@@ -102,7 +111,7 @@ export function ProductEditModal({ product, onClose, onSaved, onDeleted }: {
    * else changed the same field meanwhile, the server asks instead of
    * overwriting it. Without the server it waits on the device.
    */
-  const sendEdit = async (current: EditableProduct, fields: Omit<EditableProduct, 'id' | 'imageUrl' | 'category' | 'sellingPrice' | 'isConsignment'> & { sellingPrice: number; isConsignment: boolean }, keepMine = false) => {
+  const sendEdit = async (current: EditableProduct, fields: Omit<EditableProduct, 'id' | 'imageUrl' | 'illustration' | 'category' | 'sellingPrice' | 'isConsignment'> & { sellingPrice: number; isConsignment: boolean }, keepMine = false) => {
     const before = { name: current.name, categoryId: current.categoryId, sellingPrice: Number(current.sellingPrice), isActive: current.isActive, isConsignment: current.isConsignment ?? false };
     const changed = (Object.keys(before) as (keyof typeof before)[]).filter(k => fields[k] !== before[k]);
     if (changed.length === 0) return { queued: false as const, data: current };
@@ -140,20 +149,24 @@ export function ProductEditModal({ product, onClose, onSaved, onDeleted }: {
       if (product) {
         const sent = await sendEdit(product, fields);
         if (sent.queued) {
-          toast.success(photo !== undefined ? `${QUEUED_MESSAGE} La foto necesita conexión: cámbiala cuando vuelva.` : QUEUED_MESSAGE);
+          toast.success(photo !== undefined || drawing !== initialDrawing ? `${QUEUED_MESSAGE} La foto y el dibujo necesitan conexión: cámbialos cuando vuelva.` : QUEUED_MESSAGE);
           onSaved({ ...product, ...fields, sellingPrice: String(fields.sellingPrice) });
           return;
         }
         saved = sent.data;
       } else {
-        saved = unwrap<EditableProduct>(await api.post('/products', fields));
+        saved = unwrap<EditableProduct>(await api.post('/products', { ...fields, ...(drawing && { illustration: drawing }) }));
       }
       if (photo) {
         const form = new FormData();
-        form.append('image', photo, 'foto.jpg');
+        form.append('image', photo, photo.type === 'image/webp' ? 'foto.webp' : 'foto.jpg');
         saved = unwrap<EditableProduct>(await api.post(`/products/${saved.id}/image`, form));
       } else if (photo === null && product?.imageUrl) {
         saved = unwrap<EditableProduct>(await api.delete(`/products/${saved.id}/image`));
+      }
+      // Last, because uploading a photo goes back to the photo on the server
+      if (drawing !== initialDrawing || (photo && drawing)) {
+        saved = unwrap<EditableProduct>(await api.patch(`/products/${saved.id}`, { illustration: drawing || null }));
       }
       onSaved(saved);
     } catch (err) {
@@ -201,6 +214,8 @@ export function ProductEditModal({ product, onClose, onSaved, onDeleted }: {
             <div className="w-24 h-24 rounded-2xl overflow-hidden bg-primary/5 border border-ink/10 shrink-0 flex items-center justify-center">
               {processing ? (
                 <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              ) : drawing ? (
+                <DrinkArt illustration={drawing} animated className="w-full h-full" />
               ) : photoPreview ? (
                 <img src={photoPreview} alt="" className="w-full h-full object-cover" />
               ) : (
@@ -224,6 +239,11 @@ export function ProductEditModal({ product, onClose, onSaved, onDeleted }: {
             </div>
             <input ref={fileInput} type="file" accept="image/*" className="hidden" onChange={e => pickPhoto(e.target.files?.[0])} />
           </div>
+          <label className={`${labelClass} mt-4`} htmlFor="product-drawing">Dibujo animado</label>
+          <select id="product-drawing" value={drawing} onChange={e => setDrawing(e.target.value)} className={inputClass}>
+            <option value="">Ninguno: mostrar la foto</option>
+            {ILLUSTRATIONS.map(i => <option key={i.key} value={i.key}>{i.name}</option>)}
+          </select>
         </div>
 
         <div>

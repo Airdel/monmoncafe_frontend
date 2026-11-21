@@ -346,3 +346,81 @@
     animation: none !important;
   }
 }
+
+/*
+ * Animated drink drawings on the POS tiles (src/components/ui/DrinkArt.tsx).
+ * Only transform and opacity move, so the phone's GPU does the work. They
+ * follow "Bebidas animadas" in Temas (html[data-tile-motion]), pause off
+ * screen and in the background, and stop with the system's reduced motion.
+ */
+.drink-art svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.drink-art .paper {
+  fill: transparent;
+}
+.drink-art .drink {
+  transform-box: fill-box;
+  transform-origin: 50% 95%;
+}
+.drink-art :is(.wisp, .eyes, .straw, .bubble, .whip) {
+  transform-box: fill-box;
+}
+/* Nesting is avoided on purpose: older Android WebViews don't support it */
+:is(html[data-tile-motion='always'] .drink-art.is-animated, html[data-tile-motion='tap'] .drink-art.is-playing) .wisp { animation: drink-rise 2.6s ease-in-out infinite; transform-origin: 50% 100%; }
+:is(html[data-tile-motion='always'] .drink-art.is-animated, html[data-tile-motion='tap'] .drink-art.is-playing) .eyes { animation: drink-blink 4.6s infinite; transform-origin: center; }
+:is(html[data-tile-motion='always'] .drink-art.is-animated, html[data-tile-motion='tap'] .drink-art.is-playing) .straw { animation: drink-sway 3.2s ease-in-out infinite; transform-origin: 30% 100%; }
+:is(html[data-tile-motion='always'] .drink-art.is-animated, html[data-tile-motion='tap'] .drink-art.is-playing) .ice { animation: drink-bob 3s ease-in-out infinite; }
+:is(html[data-tile-motion='always'] .drink-art.is-animated, html[data-tile-motion='tap'] .drink-art.is-playing) .bubble { animation: drink-fizz 2.4s linear infinite; transform-origin: center; }
+:is(html[data-tile-motion='always'] .drink-art.is-animated, html[data-tile-motion='tap'] .drink-art.is-playing) .deco { animation: drink-twinkle 3.6s ease-in-out infinite; }
+:is(html[data-tile-motion='always'] .drink-art.is-animated, html[data-tile-motion='tap'] .drink-art.is-playing) .whip { animation: drink-breathe 3.4s ease-in-out infinite; transform-origin: 50% 100%; }
+html:not([data-tile-motion='still']) .drink-art.is-bounce .drink {
+  animation: drink-jelly 0.55s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.drink-art.is-offscreen *,
+html.app-hidden .drink-art * {
+  animation-play-state: paused !important;
+}
+@keyframes drink-rise {
+  0% { transform: translateY(14px) scaleY(0.85); opacity: 0; }
+  35% { opacity: 1; }
+  100% { transform: translateY(-30px) scaleY(1.05); opacity: 0; }
+}
+@keyframes drink-blink {
+  0%, 93%, 100% { transform: scaleY(1); }
+  96% { transform: scaleY(0.12); }
+}
+@keyframes drink-sway {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+@keyframes drink-bob {
+  0%, 100% { transform: translateY(-5px); }
+  50% { transform: translateY(5px); }
+}
+@keyframes drink-fizz {
+  0% { transform: translateY(20px); opacity: 0; }
+  20% { opacity: 0.9; }
+  100% { transform: translateY(-60px); opacity: 0; }
+}
+@keyframes drink-twinkle {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.6; }
+}
+@keyframes drink-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.025, 0.985); }
+}
+@keyframes drink-jelly {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.07, 0.92); }
+  60% { transform: scale(0.97, 1.04); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drink-art * {
+    animation: none !important;
+  }
+}
