@@ -10,6 +10,8 @@ Cada cambio se anota en **Sin publicar** en el mismo PR que lo hace. Al publicar
 
 ## [Sin publicar]
 
+## [2.2.0] - 2026-11-20
+
 ### Agregado
 - **Bebidas animadas en la caja**: los dibujos echan vapor, parpadean, mueven el popote y los hielos, y la soda burbujea. Al tocar una bebida rebota. Se pausan fuera de la pantalla y con la app en segundo plano.
 - En **Temas › Bebidas animadas**: Siempre (por defecto), Solo al tocar o Quietas. Con “Quitar animaciones” de Android siempre quedan quietas.
