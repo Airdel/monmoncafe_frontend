@@ -10,6 +10,19 @@ Cada cambio se anota en **Sin publicar** en el mismo PR que lo hace. Al publicar
 
 ## [Sin publicar]
 
+### Agregado
+- **Bebidas animadas en la caja**: los dibujos echan vapor, parpadean, mueven el popote y los hielos, y la soda burbujea. Al tocar una bebida rebota. Se pausan fuera de la pantalla y con la app en segundo plano.
+- En **Temas › Bebidas animadas**: Siempre (por defecto), Solo al tocar o Quietas. Con “Quitar animaciones” de Android siempre quedan quietas.
+- **Chai de guayaba** tiene dibujo propio, y en Recetas › Editar producto se puede elegir el **dibujo animado** de cada bebida (o dejar la foto).
+- **Sonidos por bebida** (nivel Todos): taza para las calientes, hielos para las frías, burbujas para la soda y licuadora para los frappés. Al cobrar suenan monedas después de la campanita.
+- Vibración también al mandar a comandas y al guardar una venta sin conexión.
+
+### Cambiado
+- Los frappés se distinguen por su topping (granos, chispas, dulce de caramelo, tableta de chocolate) y el dibujo genérico ahora lleva los tres granos del logo.
+- Las **fotos reales** llenan todo el mosaico con el nombre y el precio sobre un degradado oscuro, para leerse siempre.
+- Las fotos se guardan en **WebP de 600 px** (unos 30–60 KB): cargan más rápido y ocupan menos sin conexión.
+- En el celular los mosaicos son un poco más altos y ya no recortan el vapor ni los popotes.
+
 ## [2.1.0] - 2026-10-24
 
 ### Agregado

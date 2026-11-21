@@ -13,9 +13,11 @@ export function productImageSrc(imageUrl?: string | null): string | null {
 
 /**
  * Shrinks a photo on the device before uploading it: a phone picture of
- * several MB becomes a ~100 KB JPEG that loads fast on the POS.
+ * several MB becomes a ~30-60 KB WebP. 600 px covers the biggest POS tile on
+ * a sharp screen; it keeps the offline cache and the server's backups small.
+ * Browsers that can't make WebP (old Safari) send a JPEG instead.
  */
-export async function resizeImage(file: File, maxSize = 800, quality = 0.82): Promise<Blob> {
+export async function resizeImage(file: File, maxSize = 600, quality = 0.8): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
   try {
     const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
@@ -24,13 +26,17 @@ export async function resizeImage(file: File, maxSize = 800, quality = 0.82): Pr
     canvas.height = Math.round(bitmap.height * scale);
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('No se pudo procesar la imagen');
-    // JPEG has no transparency; a white background keeps PNG logos readable
+    // A white background keeps transparent PNG logos readable
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    return await new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob(blob => (blob ? resolve(blob) : reject(new Error('No se pudo procesar la imagen'))), 'image/jpeg', quality)
-    );
+    const encode = (type: string) => new Promise<Blob | null>(resolve => canvas.toBlob(resolve, type, quality));
+    // toBlob silently falls back to PNG when the format isn't supported
+    const webp = await encode('image/webp');
+    if (webp?.type === 'image/webp') return webp;
+    const jpeg = await encode('image/jpeg');
+    if (!jpeg) throw new Error('No se pudo procesar la imagen');
+    return jpeg;
   } finally {
     bitmap.close();
   }

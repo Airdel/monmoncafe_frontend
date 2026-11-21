@@ -15,6 +15,8 @@ import { ToolsTab } from '../components/inventory/ToolsTab';
 import { OtherPurchaseForm } from '../components/inventory/OtherPurchaseForm';
 import { ProductEditModal, type EditableProduct } from '../components/inventory/ProductEditModal';
 import { productImageSrc } from '../lib/images';
+import { illustrationSvg } from '../lib/illustrations';
+import { DrinkArt } from '../components/ui/DrinkArt';
 import { ChangeUnitModal, DeleteIngredientModal, IngredientFormModal, type ManagedIngredient } from '../components/inventory/IngredientDialogs';
 import { SearchInput } from '../components/ui/SearchInput';
 import { cn } from '../lib/cn';
@@ -52,6 +54,7 @@ interface Product {
   isActive: boolean;
   isConsignment?: boolean;
   imageUrl?: string | null;
+  illustration?: string | null;
   category?: { name: string };
 }
 
@@ -644,7 +647,9 @@ export function InventoryPage() {
                   )}
                 >
                   <span className="w-9 h-9 rounded-lg overflow-hidden bg-primary/10 shrink-0 flex items-center justify-center">
-                    {p.imageUrl
+                    {illustrationSvg(p.illustration)
+                      ? <DrinkArt illustration={p.illustration!} className="w-full h-full" />
+                      : p.imageUrl
                       ? <img src={productImageSrc(p.imageUrl) ?? undefined} alt="" loading="lazy" className="w-full h-full object-cover" />
                       : <span className="font-headline font-bold text-xs text-primary/50">{p.name.substring(0, 2).toUpperCase()}</span>}
                   </span>

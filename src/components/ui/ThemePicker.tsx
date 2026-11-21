@@ -6,7 +6,7 @@ import { SEED_PRESETS, dynamicTokens } from '../../lib/dynamicColor';
 import { resolveDynamic, useThemeStore, useWallpaperAvailable, type DynamicMode } from '../../store/theme';
 import { Modal } from './Modal';
 import { APP_VERSION } from '../../lib/version';
-import { SOUND_LEVELS, SOUND_STYLES } from '../../lib/soundSettings';
+import { SOUND_LEVELS, SOUND_STYLES, TILE_MOTIONS } from '../../lib/soundSettings';
 import { previewSound } from '../../lib/sounds';
 
 /** Theme chooser; each card renders a small live preview using that theme's tokens. */
@@ -25,6 +25,8 @@ export function ThemePicker({ onClose }: { onClose: () => void }) {
   const setSeedSource = useThemeStore(state => state.setSeedSource);
   const setDynamicMode = useThemeStore(state => state.setDynamicMode);
   const haptics = useThemeStore(state => state.haptics);
+  const tileMotion = useThemeStore(state => state.tileMotion);
+  const setTileMotion = useThemeStore(state => state.setTileMotion);
   const setHaptics = useThemeStore(state => state.setHaptics);
   const soundLevel = useThemeStore(state => state.soundLevel);
   const setSoundLevel = useThemeStore(state => state.setSoundLevel);
@@ -185,6 +187,19 @@ export function ThemePicker({ onClose }: { onClose: () => void }) {
         </label>
       )}
 
+      <h4 className="font-headline font-bold text-ink mt-6 mb-1">Bebidas animadas</h4>
+      <p className="text-ink/60 text-sm mb-3">Los dibujos de la caja echan vapor, parpadean y mueven el popote. Solo al tocar: se quedan quietos hasta que agregas uno. Si el celular tiene “Quitar animaciones” activado, siempre quedan quietos.</p>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Bebidas animadas">
+        {TILE_MOTIONS.map(option => {
+          const active = tileMotion === option.id;
+          return (
+            <button key={option.id} onClick={() => setTileMotion(option.id)} aria-pressed={active} className={`h-11 px-4 rounded-full border-2 text-sm font-bold transition-colors ${active ? 'border-primary bg-primary/10 text-primary' : 'border-ink/10 hover:border-primary/40'}`}>
+              {option.name}
+            </button>
+          );
+        })}
+      </div>
+
       <h4 className="font-headline font-bold text-ink mt-6 mb-1">Al tocar</h4>
       <label className="flex items-center gap-3 text-sm cursor-pointer select-none">
         <input
@@ -197,7 +212,7 @@ export function ThemePicker({ onClose }: { onClose: () => void }) {
       </label>
 
       <h4 className="font-headline font-bold text-ink mt-6 mb-1">Sonidos</h4>
-      <p className="text-ink/60 text-sm mb-3">Solo importantes: venta, pedido a comandas, comanda nueva o lista, errores y corte. Todos: también al agregar y quitar productos.</p>
+      <p className="text-ink/60 text-sm mb-3">Solo importantes: venta, pedido a comandas, comanda nueva o lista, errores y corte. Todos: también al agregar y quitar productos, y cada bebida suena distinto (taza, hielos, burbujas, licuadora).</p>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Cuándo suenan">
         {SOUND_LEVELS.map(option => {
           const active = soundLevel === option.id;

@@ -6,7 +6,7 @@ import { DARK_THEMES, DEFAULT_THEME, DYNAMIC_THEME, isThemeId, type ThemeId } fr
 import { DEFAULT_DECOR, isDecorMode, resolveSeason, type DecorMode, type SeasonId } from '../lib/seasons';
 import { DEFAULT_SEED, dynamicTokens, isHexColor } from '../lib/dynamicColor';
 import { getWallpaperSeed } from '../lib/systemColors';
-import { isSoundLevel, isSoundStyle, type SoundLevel, type SoundStyle } from '../lib/soundSettings';
+import { isSoundLevel, isSoundStyle, isTileMotion, type SoundLevel, type SoundStyle, type TileMotion } from '../lib/soundSettings';
 
 /** Light/dark for the "Mi fondo" theme; 'auto' follows the phone's dark mode. */
 export type DynamicMode = 'auto' | 'light' | 'dark';
@@ -41,6 +41,9 @@ interface ThemeState {
   setSoundLevel: (soundLevel: SoundLevel) => void;
   setSoundStyle: (soundStyle: SoundStyle) => void;
   setSoundVolume: (soundVolume: number) => void;
+  /** Drinks on the POS tiles: always moving, only after a tap, or still. */
+  tileMotion: TileMotion;
+  setTileMotion: (tileMotion: TileMotion) => void;
 }
 
 export const useThemeStore = create<ThemeState>()(
@@ -66,6 +69,8 @@ export const useThemeStore = create<ThemeState>()(
       setSoundLevel: (soundLevel) => set({ soundLevel }),
       setSoundStyle: (soundStyle) => set({ soundStyle }),
       setSoundVolume: (soundVolume) => set({ soundVolume }),
+      tileMotion: 'always',
+      setTileMotion: (tileMotion) => set({ tileMotion }),
     }),
     {
       name: 'theme',
@@ -83,6 +88,7 @@ export const useThemeStore = create<ThemeState>()(
           haptics: typeof stored.haptics === 'boolean' ? stored.haptics : current.haptics,
           soundLevel: isSoundLevel(stored.soundLevel) ? stored.soundLevel : current.soundLevel,
           soundStyle: isSoundStyle(stored.soundStyle) ? stored.soundStyle : current.soundStyle,
+          tileMotion: isTileMotion(stored.tileMotion) ? stored.tileMotion : current.tileMotion,
           soundVolume: typeof stored.soundVolume === 'number' && stored.soundVolume >= 0 && stored.soundVolume <= 100 ? stored.soundVolume : current.soundVolume,
         };
       },
@@ -167,7 +173,12 @@ export async function refreshWallpaperSeed() {
 /** Keeps <html data-theme> (and the Android status bar) in sync with the store. */
 export function initTheme() {
   applyTheme(useThemeStore.getState());
+  const root = document.documentElement;
+  root.dataset.tileMotion = useThemeStore.getState().tileMotion;
+  // The drink animations stop while the app is in the background
+  document.addEventListener('visibilitychange', () => root.classList.toggle('app-hidden', document.hidden));
   useThemeStore.subscribe((state, prev) => {
+    if (state.tileMotion !== prev.tileMotion) root.dataset.tileMotion = state.tileMotion;
     if (state.theme !== prev.theme || state.seed !== prev.seed || state.seedSource !== prev.seedSource || state.dynamicMode !== prev.dynamicMode) {
       applyTheme(state);
     }
